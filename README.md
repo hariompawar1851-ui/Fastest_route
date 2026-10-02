@@ -1,6 +1,6 @@
 # ⚡ DynamicRoute
 
-> **Ultra-Fast Adaptive Routing Engine with Multi-Level Graph Compression & Dynamic Subgraph Repair**
+> **Adaptive Shortest-Path & Route Recovery Engine for Dynamic Graphs**
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
@@ -9,46 +9,120 @@
 
 ---
 
-## 🚀 Overview
+## 📌 Overview
 
-Standard routing engines rerun Dijkstra or $A^*$ across entire road networks whenever traffic conditions fluctuate (accidents, construction, congestion), incurring massive recomputation latency of $O(|E| + |V| \log |V|)$ per query.
+Standard shortest-path engines recalculate Dijkstra or $A^*$ across entire road networks whenever travel conditions fluctuate (lane accidents, construction delays, sudden congestion). For large graphs, full recomputation incurs an unnecessary cost of $O(|E| + |V| \log |V|)$ per query, even when the disturbance is strictly local.
 
-**DynamicRoute** solves this by uniting **Graph Compression** with **Dynamic Subgraph Repair**:
-- **Graph Compression:** Contracts redundant road corridors (Degree-2 reduction) and builds shortcut hierarchies (CCH) in cache-optimized Compressed Sparse Row (CSR) layouts to deliver **sub-millisecond (< 0.1 ms) fastest-path queries**.
-- **Dynamic Incremental Repair:** When traffic events occur, it isolates updates strictly to the affected perturbation zone (the $\delta$-subgraph) using Ramalingam–Reps and $D^*$ Lite—eliminating full-graph recalculation.
-- **Explainable Routing:** Provides human- and machine-readable causal explanations answering *"Why did my route change?"* along with exact efficiency metrics.
+**DynamicRoute** eliminates full recomputations using **Incremental Heuristic Search** ($D^*$ Lite and Lifelong Planning $A^*$ / LPA*). By maintaining search tree states and one-step lookahead values, the engine restricts updates strictly to the affected perturbation region (the $\delta$-subgraph), achieving fast route recovery with mathematical optimality guaranteed.
 
 ---
 
-## ✨ Key Highlights
+## ⚡ Core Features
 
-| Feature | Description |
-| :--- | :--- |
-| 🗜️ **Topological Compression** | Contracts non-branching road chains (degree-2 nodes) into single macro-edges, shrinking graph size by **30%–50%** losslessly. |
-| ⚡ **Hierarchical Shortcuts (CCH)** | Upward bidirectional search reduces query search space from 500,000+ nodes to ~200–500 nodes (**$< 0.1\text{ ms}$ query latency**). |
-| 🔄 **Incremental Subgraph Repair** | Dynamically updates only invalidated subtrees upon road blockages/congestion ($O(\|\delta\| + |\delta|\log|\delta|)$). |
-| 🧠 **Memory & Cache Locality** | Flat Compressed Sparse Row (CSR) memory layout eliminates pointer-chasing and maximizes CPU L1/L2 cache hits. |
-| 🔍 **Explainability Engine** | Logs causal diagnostics detailing edge failures, candidate bypass evaluations, and compute time saved. |
+- **Incremental Route Repair ($D^*$ Lite / LPA\*):** Reuses distance values from previous iterations, only updating inconsistent vertices ($g(u) \neq rhs(u)$) affected by edge weight changes or road blockages.
+- **Dual Adjacency Graph:** Directed weighted graph with forward and backward adjacency for $O(1)$ neighbor lookup and instant edge cost modification.
+- **Baseline Verification Engine:** Built-in standard Dijkstra and $A^*$ implementations to automatically verify correctness ($\text{cost}_{\text{incremental}} \equiv \text{cost}_{\text{Dijkstra}}$).
+- **Performance & Diagnostic Metrics:** Records execution latency ($\mu s$), node expansion counts, and speedup ratios against full recalculation.
+- **Modular Architecture:** Clean modern C++20 design with CMake build configuration and automated test suite.
 
 ---
 
-## 📊 Performance at a Glance
+## 🧩 Optional & Advanced Extensions
 
-| Approach | Query Latency ($s \to t$) | Dynamic Traffic Update | Nodes Explored on Change |
-| :--- | :--- | :--- | :--- |
-| **Standard Dijkstra** | $\sim 50\text{--}200\text{ ms}$ | Recompute entire graph ($O(\|E\| + \|V\|\log\|V\|)$) | Entire graph ($100\%$) |
-| **Standard $A^*$** | $\sim 10\text{--}50\text{ ms}$ | Recompute entire graph | Search cone |
-| **DynamicRoute (RR / $D^*$ Lite)** | **$\sim 0.1\text{--}1.5\text{ ms}$** | Incremental repair strictly on $\delta$-subgraph | **Only affected subtrees ($< 0.1\%$)** |
-| **DynamicRoute + CCH / Compression** | **$< 0.05\text{--}0.2\text{ ms}$** | Fast metric customization pass ($\sim 10\text{ ms}$) | **Upward hierarchy only (~300 nodes)** |
+The repository is architected to support optional modular extensions:
+
+- 🔹 **Ramalingam–Reps (RR) Algorithm *(Optional)*:** Bounded incremental Single-Source Shortest Path (SSSP) tree maintenance.
+- 🔹 **Degree-2 Chain Compression *(Optional)*:** Topological reduction contracting non-branching road corridors into macro-edges, shrinking graph size by 30%–50%.
+- 🔹 **OSM Road Graph Ingestion *(Optional)*:** Parser to import real-world road networks from OpenStreetMap data.
+- 🔹 **Memory & Cache Profiling *(Optional)*:** Compressed Sparse Row (CSR) representation and CPU cache locality benchmarking.
+- 🔹 **Advanced Event Simulation *(Optional)*:** Sophisticated traffic scenarios such as multi-road congestion waves and incident zones.
+- 🔹 **Interactive Visualizer *(Optional)*:** Web/GUI interface for real-time graph state and route repair visualization.
 
 ---
 
-## 🛠️ Quick Start
+## 📊 Algorithmic Complexity Comparison
+
+| Algorithm | Paradigm | Query Latency ($s \to t$) | Dynamic Edge Weight Increase / Block | Dynamic Edge Weight Decrease / Clear | Nodes Visited in Local Change |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Dijkstra (Scratch)** | Greedy Static | $O(|E| + |V| \log |V|)$ | Recompute full graph | Recompute full graph | Full graph exploration ($|V|$) |
+| **$A^*$ (Scratch)** | Heuristic Static | $O(|E|)$ average | Recompute full graph | Recompute full graph | Goal-directed cone |
+| **$D^*$ Lite / LPA\* *(Core)*** | Incremental Heuristic | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ | $O(\|\delta\| + |\delta| \log |\delta|)$ | **Only inconsistent nodes ($\|\delta\| \ll |V|$)** |
+| **Ramalingam-Reps *(Optional)*** | Dynamic SSSP Tree | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ | $O(\|\delta\| + |\delta| \log |\delta|)$ | **Only affected subtree & boundary** |
+| **Degree-2 + $D^*$ Lite *(Optional)*** | Compressed Incremental | Compressed Tree Lookup ($O(1)$) | $O(\|\delta_c\| + |\delta_c| \log |\delta_c|)$ | $O(\|\delta_c\| + |\delta_c| \log |\delta_c|)$ | **Only affected macro-nodes ($\|\delta_c\| \ll \|\delta\|$)** |
+
+*Note: $\|\delta\|$ represents the number of edges incident to vertices whose distance or shortest-path parent changes. In local road changes, $|\delta|$ is typically a tiny fraction of $|V|$.*
+
+---
+
+## 🏗️ Architecture
+
+```
+                  Dynamic Graph Event
+        (Edge Weight Increase / Decrease / Block)
+                          │
+                          ▼
+            Update affected edge weight w(u, v)
+            Update one-step lookahead rhs(v)
+                          │
+                          ▼
+               Is v inconsistent?
+                (g(v) != rhs(v))
+                  /           \
+                No             Yes
+                /               \
+         [No action]      [Insert v into Priority Queue]
+                                │
+                                ▼
+                  Process Inconsistent Frontier:
+           ┌────────────────────────────────────────┐
+           │ Overconsistent: g(u) > rhs(u)          │
+           │   -> Set g(u) = rhs(u)                 │
+           │   -> Propagate improvement to succ(u)  │
+           ├────────────────────────────────────────┤
+           │ Underconsistent: g(u) < rhs(u)         │
+           │   -> Set g(u) = ∞                      │
+           │   -> Re-evaluate u and all succ(u)     │
+           │   -> Find best alternative predecessor │
+           └────────────────────────────────────────┘
+                                │
+                                ▼
+                     Goal Reached / Locally Consistent
+                                │
+                                ▼
+                      Optimal Route Extracted
+                     + Performance Metrics Logged
+```
+
+---
+
+## 📁 Repository Layout
+
+```text
+dynamic-route/
+├── docs/
+│   ├── research_work.md           # Research blueprint and algorithmic specifications
+│   └── WORKFLOW_AND_RESEARCH.md   # Mathematical derivations and literature review
+├── include/
+│   ├── graph/                     # Adjacency representations, node & edge definitions
+│   ├── algorithms/                # Dijkstra, A*, D* Lite / LPA*, RR (optional)
+│   ├── simulation/                # Dynamic edge perturbation generators
+│   └── compression/               # Degree-2 contraction & unpacker (optional)
+├── src/                           # Core implementations & CLI main
+├── tests/                         # Automated invariant tests (Incremental == Dijkstra)
+├── benchmarks/                    # Latency and node-expansion benchmarking suite
+├── CMakeLists.txt                 # Modern CMake build configuration
+├── .gitignore
+└── README.md
+```
+
+---
+
+## 🚀 Getting Started
 
 ### Prerequisites
 
-- **C++ Compiler:** Supporting C++20 (GCC 11+, Clang 13+, or MSVC 2019+)
-- **CMake:** v3.20 or newer
+- Modern C++ compiler supporting **C++20** (GCC 11+, Clang 13+, or MSVC 2019+)
+- **CMake** (v3.20 or newer)
 - **Git**
 
 ### Build
@@ -58,7 +132,7 @@ Standard routing engines rerun Dijkstra or $A^*$ across entire road networks whe
 git clone https://github.com/<your-username>/dynamic-route.git
 cd dynamic-route
 
-# Configure and compile
+# Configure and build
 mkdir build && cd build
 cmake ..
 cmake --build .
@@ -67,59 +141,39 @@ cmake --build .
 ### Run
 
 ```bash
-# Run interactive CLI & simulation demo
+# Run the interactive CLI & simulation demo
 ./bin/dynamic_route
 
-# Run automated invariant tests (verifies exact optimality against Dijkstra)
+# Run automated correctness verification tests
 ./bin/run_tests
 
-# Run latency & compression benchmarks
+# Run benchmark comparisons
 ./bin/run_benchmarks
 ```
 
 ---
 
-## 📂 Repository Layout
+## 🗺️ Project Roadmap
 
-```text
-dynamic-route/
-├── docs/
-│   ├── research_work.md           # Research blueprint and algorithm specifications
-│   └── WORKFLOW_AND_RESEARCH.md   # Mathematical derivations and literature review
-├── include/
-│   ├── graph/                     # Adjacency representations, node & edge definitions
-│   ├── compression/               # Degree-2 contraction, CCH, CSR, path unpacker
-│   ├── algorithms/                # Dijkstra, A*, Ramalingam-Reps, D* Lite, LPA*
-│   ├── explainability/            # Causal reasoning & diagnostics engine
-│   └── simulation/                # Traffic event generators & scenarios
-├── src/                           # Core implementation files
-├── tests/                         # Correctness verification suites
-├── benchmarks/                    # Scalability & compression speedup benchmarks
-├── CMakeLists.txt                 # Modern CMake build configuration
-└── README.md
-```
+### Core Phases
+- [x] **Phase 0:** Project specification, algorithmic research, and system design.
+- [ ] **Phase 1:** Core graph engine with forward/backward adjacency and $O(1)$ edge modification.
+- [ ] **Phase 2:** Baseline Dijkstra and $A^*$ implementations for ground-truth verification.
+- [ ] **Phase 3:** Incremental Heuristic Search ($D^*$ Lite / Lifelong Planning $A^*$).
+- [ ] **Phase 4:** Automated invariant test suite (`cost(Incremental) == cost(Dijkstra)`) and benchmarks.
+
+### Optional Extension Phases
+- [ ] **Phase 5 (Optional):** Ramalingam–Reps (RR) dynamic Single-Source Shortest Path engine.
+- [ ] **Phase 6 (Optional):** Degree-2 topological compression pipeline and path unpacker.
+- [ ] **Phase 7 (Optional):** OSM road graph importer and sophisticated traffic incident models.
+- [ ] **Phase 8 (Optional):** Memory/cache profiling (CSR layout) and interactive visualizer.
 
 ---
 
 ## 📚 In-Depth Documentation
 
-For researchers and engineers seeking full mathematical derivations, research citations, and implementation architecture:
-- 📖 **[Research & Algorithmic Blueprint](docs/research_work.md):** Contraction Hierarchies, RR-Algorithms, consistency states, and benchmark plans.
-- 🔬 **[Workflow & Research Foundations](docs/WORKFLOW_AND_RESEARCH.md):** Mathematical formulas for degree-2 contraction, witness search, delta indexing, and paper citations.
-
----
-
-## 🗺️ Development Roadmap
-
-- [x] **Phase 0:** Project specification, literature research, and architectural design.
-- [ ] **Phase 1:** Core graph engine with dual forward/backward adjacency and CSR memory layout.
-- [ ] **Phase 2:** Graph compression pipeline (Degree-2 chain contraction, shortcut manager, and path unpacker).
-- [ ] **Phase 3:** Baseline Dijkstra/A* and dynamic SSSP algorithms (Ramalingam-Reps & D* Lite).
-- [ ] **Phase 4:** Contraction Hierarchies & Customizable Contraction Hierarchies (CCH).
-- [ ] **Phase 5:** Automated invariant test suite (Compressed Dynamic Route == Ground Truth Dijkstra).
-- [ ] **Phase 6:** Explainability & causal diagnostics engine.
-- [ ] **Phase 7:** Dynamic scenario simulation & large-scale benchmarking suite.
-- [ ] **Phase 8:** Interactive web dashboard with real-time graph visualization.
+- 📖 **[Research & Algorithmic Blueprint](docs/research_work.md):** Detailed algorithms, consistency states, and benchmark plans.
+- 🔬 **[Workflow & Research Foundations](docs/WORKFLOW_AND_RESEARCH.md):** Mathematical foundations, literature review, and complexity analysis.
 
 ---
 

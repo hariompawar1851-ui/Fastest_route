@@ -1,155 +1,168 @@
 # DynamicRoute: Research & Engineering Blueprint
 
-> **High-Performance Adaptive Shortest-Path, Graph Compression & Route Recovery Engine for Dynamic Graphs**
+> **Adaptive Shortest-Path & Route Recovery Engine for Dynamic Graphs**
 
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](../LICENSE)
 [![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen.svg)]()
-[![Status](https://img.shields.io/badge/Status-Research%20%26%20Development-orange.svg)]()
+[![Status](https://img.shields.io/badge/Status-Active%20Development-orange.svg)]()
 
 ---
 
-## 📌 Overview
+## 1. Executive Summary & Problem Formulation
 
-Traditional shortest-path systems compute routes assuming a static road network. When conditions change—such as road blockages, construction delays, lane accidents, or sudden congestion—standard engines rerun Dijkstra or $A^*$ across the entire graph. For large networks, this incurs an unnecessary computational cost of $O(|E| + |V| \log |V|)$ per query, even when the perturbation only affects a tiny fraction of roads.
+Standard shortest-path algorithms assume a static graph $G = (V, E)$. When edge costs change—such as road blockages, construction delays, lane accidents, or sudden congestion—standard engines rerun Dijkstra or $A^*$ across the entire graph. For large networks, this incurs an unnecessary computational cost of $O(|E| + |V| \log |V|)$ per query, even when the perturbation only affects a localized section of the road network.
 
-**DynamicRoute** addresses this challenge by fusing **dynamic graph theory**, **multi-level graph compression**, and **incremental heuristic search**:
+**DynamicRoute** addresses this challenge through **Incremental Heuristic Search**. Instead of recomputing shortest paths from scratch, the system maintains vertex distance estimates and one-step lookahead values, isolating graph repairs strictly to the affected perturbation region (the $\delta$-subgraph).
 
-1. **Multi-Level Graph Compression:** Road networks possess inherent topological structure. By applying **Degree-2 Chain Contraction**, **Contraction Hierarchies (CH / CCH)**, and **Compressed Sparse Row (CSR)** cache-optimized layouts, the graph size and search spaces are compressed by orders of magnitude—enabling **microsecond-level fastest-path queries** with lossless path reconstruction.
-2. **Incremental Dynamic Repair:** Instead of recomputing from scratch, the system maintains a **Shortest Path Tree (SPT)** and dynamically repairs only the affected perturbation region (the $\delta$-subgraph) using Ramalingam–Reps and $D^*$ Lite.
-3. **Explainable Routing & Diagnostics:** An integrated explainability engine provides causal reasoning for route modifications, detailing *why* an existing path became suboptimal or invalid, *how* the new alternative was selected, and the exact computational speedup achieved.
-
----
-
-## 🔬 Research Foundations
-
-DynamicRoute is built on seminal research in dynamic graph algorithms, hierarchical route planning, and incremental search:
-
-1. **Ramalingam & Reps (1996)** — *An Incremental Algorithm for a Generalization of the Shortest-Path Problem* (ACM TOPLAS).
-   * Incremental and decremental Single-Source Shortest Path (SSSP) tree maintenance.
-   * Restricts updates strictly to the $\delta$-subgraph: $O(\|\delta\| + |\delta| \log |\delta|)$.
-2. **Geisberger, Sanders, Schultes, & Delling (2008, 2012)** — *Contraction Hierarchies: Faster and Simpler Hierarchical Routing in Road Networks* (WEA / ACM TALG).
-   * Graph compression via iterative vertex contraction and shortcut insertion.
-   * Compresses the query search space from hundreds of thousands of vertices to a few hundred upward/downward hops, yielding **sub-millisecond queries**.
-3. **Dibbelt, Strasser, & Wagner (2016)** — *Customizable Contraction Hierarchies (CCH)* (ACM JEA).
-   * Separates metric-independent topological contraction from dynamic metric updates.
-   * Allows live traffic and weight changes to be customized onto pre-compressed hierarchies in milliseconds without invalidating contraction orders.
-4. **Koenig & Likhachev (2002, 2005)** — *D\* Lite* and *Lifelong Planning A\* (LPA\*)* (AAAI / AI Journal).
-   * Uses one-step lookahead values ($rhs$) and consistency states ($g(u) \gtrless rhs(u)$) to repair shortest-path trees incrementally toward a destination goal.
-5. **Frigioni, Marchetti-Spaccamela, & Nanni (2000)** — *Fully Dynamic Algorithms for Shortest Paths in Directed Graphs* (Theoretical Computer Science).
-   * Dynamic Shortest Path Tree maintenance under arbitrary weight modifications and edge insertions/deletions.
-
-Detailed literature review, mathematical derivations, and compression mechanics are available in [WORKFLOW_AND_RESEARCH.md](WORKFLOW_AND_RESEARCH.md).
+### Core Research Focus
+- **Incremental Heuristic Search ($D^*$ Lite / Lifelong Planning $A^*$):** Focus updates exclusively on vertices whose distance estimates become inconsistent with their lookahead values toward the target goal.
+- **Dual Adjacency Graph Representation:** Maintain forward and backward edge lists to allow $O(1)$ predecessor and successor queries during dynamic edge weight modifications.
+- **Ground-Truth Correctness Verification:** Automated invariant verification ensuring that the incremental path cost matches a scratch-recomputed Dijkstra path on every modification.
+- **Empirical Profiling:** Measure wall-clock latency ($\mu s$), vertex visitation count, priority queue operations, and speedup ratios against full recomputation.
 
 ---
 
-## ⚡ Key Features
+## 2. Research Foundations
 
-- **Multi-Level Graph Compression Engine:**
-  - **Lossless Degree-2 Chain Contraction:** Compresses non-branching road corridors (chains of degree-2 vertices) into single shortcut macro-edges, shrinking graph size $|V|$ and $|E|$ by **30%–50%** while preserving exact shortest paths.
-  - **Contraction Hierarchies (CH / CCH):** Hierarchically contracts vertices based on highway importance, introducing shortcut edges to accelerate point-to-point queries to **microseconds ($\le 0.1\text{ ms}$)**.
-  - **Hardware Cache-Optimized Compressed Sparse Row (CSR):** Flat contiguous memory layout eliminating pointer indirection and maximizing CPU L1/L2 cache line hits during search.
-  - **$O(1)$ Path Unpacker:** Rapidly unpacks compressed macro-shortcuts back into complete turn-by-turn road geometry and node sequences.
-- **Dynamic Shortest Path Tree (SPT) Maintenance:** Detects invalidated subtrees when edge costs increase or blockages occur, isolating updates to the affected frontier.
-- **Dual Algorithmic Engine:**
-  - **Ramalingam–Reps (RR):** Incremental SSSP maintenance for dynamic graphs.
-  - **D\* Lite / Lifelong Planning A\* (LPA\*):** Incremental heuristic goal-directed search.
-  - **Baseline Ground-Truth:** Standard Dijkstra and $A^*$ for automated correctness validation across both raw and compressed graphs.
-- **Explainability & Causal Reasoning:** Emits human- and machine-readable explanation logs detailing edge failures, invalidated subtrees, evaluated bypasses, and computational savings.
-- **Dynamic Event Simulator:** Simulates real-world traffic phenomena including single-road accidents, rush-hour corridor congestion waves, and geographic disaster exclusion zones.
-- **High-Performance Benchmarking:** Measures latency ($\mu s$), node visitation count, compression ratio, memory footprint, and speedup ratios against full recomputation.
-- **Web-Ready Architecture:** Clean separation of graph engine from presentation layer with JSON state export ready for web dashboards and visualization.
+The core engine is grounded in peer-reviewed research in incremental search and dynamic graph theory:
+
+### 2.1 Core Foundations
+
+1. **Koenig & Likhachev (2002, 2005)**
+   * **Title:** *D\* Lite* (AAAI 2002) and *Lifelong Planning A\** (Artificial Intelligence Journal, 2004).
+   * **Venue:** AAAI / Journal of Artificial Intelligence.
+   * **Core Contribution:** Introduces the concept of **one-step lookahead values ($rhs$)** alongside current distance estimates ($g$). Vertices are classified into consistency states:
+     - *Locally Consistent:* $g(u) = rhs(u)$
+     - *Locally Overconsistent:* $g(u) > rhs(u)$ (distance can be decreased)
+     - *Locally Underconsistent:* $g(u) < rhs(u)$ (distance must increase or find an alternative predecessor)
+   * Only inconsistent vertices are placed into the priority queue, enabling fast repair toward a goal.
+
+2. **Frigioni, Marchetti-Spaccamela, & Nanni (2000)**
+   * **Title:** *Fully Dynamic Algorithms for Shortest Paths in Directed Graphs*
+   * **Venue:** ACM Transactions on Algorithms / Theoretical Computer Science.
+   * **Core Contribution:** Theoretical properties of dynamic shortest-path trees under arbitrary edge deletions, insertions, weight increases, and weight decreases in general directed graphs.
+
+### 2.2 Optional & Extension Literature
+
+3. **Ramalingam & Reps (1996) *(Optional Extension)***
+   * **Title:** *An Incremental Algorithm for a Generalization of the Shortest-Path Problem*
+   * **Venue:** ACM Transactions on Programming Languages and Systems (TOPLAS), 18(6), 1020–1046.
+   * **Core Contribution:** The foundational **RR-Algorithm** for bounded dynamic Single-Source Shortest Paths (SSSP) tree maintenance, bounding updates to the $\delta$-subgraph: $O(\|\delta\| + |\delta| \log |\delta|)$.
 
 ---
 
-## 📊 Algorithmic Complexity & Compression Comparison
+## 3. Algorithmic Specifications
 
-| Algorithm / Technique | Paradigm | Preprocessing / Compression Time | Query Latency ($s \to t$) | Dynamic Traffic Update Cost | Nodes Visited in Local Change |
+### 3.1 Graph Representation & Lookahead States
+In a directed weighted graph $G = (V, E)$, for a given source $S$, we maintain for each vertex $u \in V$:
+* $g(u)$: The current known shortest-path distance estimate from $S$ to $u$.
+* $rhs(u)$: The one-step lookahead value defined as:
+  $$rhs(u) = \begin{cases} 0 & \text{if } u = S \\ \min_{v \in \text{Pred}(u)} \big(g(v) + w(v, u)\big) & \text{otherwise} \end{cases}$$
+* $parent(u)$: The current predecessor on the shortest path tree:
+  $$parent(u) = \arg\min_{v \in \text{Pred}(u)} \big(g(v) + w(v, u)\big)$$
+
+### 3.2 Consistency States & Priority Queue
+A vertex is:
+* **Locally Consistent:** $g(u) = rhs(u)$ (optimal based on current predecessor distances).
+* **Locally Overconsistent:** $g(u) > rhs(u)$ (a shorter path is available; vertex needs relaxation).
+* **Locally Underconsistent:** $g(u) < rhs(u)$ (an edge cost increased or road blocked; current path is invalid).
+
+The priority queue stores **only inconsistent vertices**, keyed by a lexicographical 2-tuple:
+$$k(u) = \big[k_1(u), \; k_2(u)\big]$$
+where:
+$$k_1(u) = \min(g(u), rhs(u)) + h(u, \text{Goal})$$
+$$k_2(u) = \min(g(u), rhs(u))$$
+and $h(u, \text{Goal})$ is an admissible heuristic function (e.g., Euclidean distance for planar graphs, or $0$ for SSSP).
+
+### 3.3 Dynamic Repair Procedure (LPA* / D* Lite)
+
+```
+When an edge (u, v) changes weight to w_new(u, v):
+1. Update w(u, v) = w_new(u, v).
+2. Update rhs(v) based on min_{p in Pred(v)} (g(p) + w(p, v)).
+3. Update vertex v in Priority Queue:
+   - If g(v) != rhs(v), insert or update v with key k(v).
+   - If g(v) == rhs(v), remove v from Priority Queue.
+4. While (Priority Queue min key < k(Goal) OR rhs(Goal) != g(Goal)):
+   - Pop vertex u with smallest key.
+   - If g(u) > rhs(u) [Overconsistent]:
+       Set g(u) = rhs(u).
+       For each s in Succ(u), re-evaluate rhs(s) and update s in Priority Queue.
+   - Else [Underconsistent]:
+       Set g(u) = infinity.
+       Re-evaluate rhs(u) and for each s in Succ(u), re-evaluate rhs(s).
+       Update u and succ(u) in Priority Queue.
+5. Extract reconstructed shortest path by back-tracing from Goal to S.
+```
+
+---
+
+## 4. Optional & Advanced Extension Modules
+
+DynamicRoute is designed with modular interfaces to support optional experimental extensions:
+
+### 4.1 Ramalingam–Reps (RR) Algorithm *(Optional)*
+* Implements tree-based incremental Single-Source Shortest Path (SSSP) maintenance.
+* Separates updates into *phase 1* (identifying the affected subtree via DFS/BFS) and *phase 2* (recalculating distances for boundary and internal vertices via priority queue).
+* Useful for all-pairs or single-source applications where no specific single destination goal is designated.
+
+### 4.2 Degree-2 Topological Graph Compression *(Optional)*
+* Identifies non-branching vertex chains where $\text{in-deg}(v) = \text{out-deg}(v) = 1$.
+* Replaces chains $u \leftrightarrow v_1 \leftrightarrow \dots \leftrightarrow w$ with a macro-edge $(u, w)$ with aggregated weight $\sum w_i$.
+* Reduces $|V|$ and $|E|$ by 30%–50% for road networks while preserving 100% path optimality.
+* Includes a lightweight path unpacker to expand macro-edges back into full coordinate sequences.
+
+### 4.3 OSM Road Graph Ingestion *(Optional)*
+* Ingests real-world road networks from OpenStreetMap XML/PBF formats into the dual-adjacency graph structure.
+* Parses node latitude/longitude coordinates and road classification speeds.
+
+### 4.4 Memory & Cache Experiments *(Optional)*
+* Evaluates memory locality by comparing standard `std::vector` adjacency structures with flat Compressed Sparse Row (CSR) representations.
+* Profiles CPU L1/L2 cache misses during high-frequency node relaxation.
+
+### 4.5 Sophisticated Event Models *(Optional)*
+* Simulates advanced traffic phenomena such as:
+  - Multi-edge corridor congestion waves (propagating slow traffic along arterial routes).
+  - Geographic incident exclusion zones (disabling all edges within a specified radius).
+
+### 4.6 Advanced Visualization *(Optional)*
+* Graphical user interface / web visualization displaying the road network, live edge weight perturbations, and incremental search frontier expansion.
+
+---
+
+## 5. Comparative Complexity Matrix
+
+| Algorithm | Paradigm | Query Latency ($s \to t$) | Dynamic Edge Weight Increase / Block | Dynamic Edge Weight Decrease / Clear | Nodes Visited in Local Change |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Standard Dijkstra** | Greedy Static | None ($0$) | $O(|E| + |V| \log |V|)$ ($\sim 50\text{--}200\text{ ms}$) | Recompute entire graph | Full graph exploration ($|V|$) |
-| **Standard $A^*$** | Heuristic Static | None ($0$) | $O(|E|)$ average ($\sim 10\text{--}50\text{ ms}$) | Recompute entire graph | Goal-directed search cone |
-| **Ramalingam-Reps (RR)** | Dynamic SSSP Tree | $O(|E| + |V| \log |V|)$ initial | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ ($\sim 0.1\text{--}2\text{ ms}$) | **Only affected subtree & boundary ($\|\delta\|$)** |
-| **$D^*$ Lite / LPA\*** | Incremental Heuristic | $O(|E| + |V| \log |V|)$ initial | Guided Incremental ($O(\|\delta\|)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ ($\sim 0.1\text{--}1.5\text{ ms}$) | **Only inconsistent nodes towards goal** |
-| **Degree-2 Compressed + Dynamic SSSP** | Topological Reduction + Dynamic Repair | $O(|V| + |E|)$ ($< 50\text{ ms}$, one-time) | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta_c\| + |\delta_c| \log |\delta_c|)$ (**$2\times\text{--}3\times$ faster**) | **Only affected macro-nodes ($\|\delta_c\| \ll \|\delta\|$)** |
-| **Customizable Contraction Hierarchies (CCH)** | Hierarchical Shortcut Compression | Metric-independent ordering (one-time) | **$O(\text{polylog } |V|)$ ($\mathbf{< 0.05\text{--}0.2\text{ ms}}$)** | Metric customization pass ($\sim 10\text{--}50\text{ ms}$) | Upward search space only (~200–500 nodes) |
-
-*Note: $\|\delta\|$ denotes the number of edges incident to vertices whose distance or shortest-path parent changes. When a local road is blocked, $|\delta|$ is typically $< 50$ nodes even in networks with $|V| = 500,000$. On the compressed graph, $|\delta_c|$ is further reduced.*
+| **Dijkstra (Scratch)** | Greedy Static | $O(|E| + |V| \log |V|)$ | Recompute full graph | Recompute full graph | Full graph exploration ($|V|$) |
+| **$A^*$ (Scratch)** | Heuristic Static | $O(|E|)$ average | Recompute full graph | Recompute full graph | Goal-directed cone |
+| **$D^*$ Lite / LPA\* *(Core)*** | Incremental Heuristic | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ | $O(\|\delta\| + |\delta| \log |\delta|)$ | **Only inconsistent nodes ($\|\delta\| \ll |V|$)** |
+| **Ramalingam-Reps *(Optional)*** | Dynamic SSSP Tree | Pre-computed Tree Lookup ($O(1)$) | $O(\|\delta\| + |\delta| \log |\delta|)$ | $O(\|\delta\| + |\delta| \log |\delta|)$ | **Only affected subtree & boundary** |
+| **Degree-2 + $D^*$ Lite *(Optional)*** | Compressed Incremental | Compressed Tree Lookup ($O(1)$) | $O(\|\delta_c\| + |\delta_c| \log |\delta_c|)$ | $O(\|\delta_c\| + |\delta_c| \log |\delta_c|)$ | **Only affected macro-nodes ($\|\delta_c\| \ll \|\delta\|$)** |
 
 ---
 
-## 🏗️ Architecture
-
-```
-                    Raw Road Network G = (V, E)
-                                │
-                                ▼
-            ┌────────────────────────────────────────┐
-            │   Graph Compression & Reduction Engine │
-            ├────────────────────────────────────────┤
-            │  1. Degree-2 Chain Contraction (Macro) │
-            │  2. Contraction Hierarchy / Shortcuts  │
-            │  3. Compressed Sparse Row (CSR) Layout │
-            └────────────────────────────────────────┘
-                                │
-                                ▼
-                    Compressed Graph G_c = (V_c, E_c)
-                                │
-                ┌───────────────┴───────────────┐
-                ▼                               ▼
-       Microsecond Query               Dynamic Event Occurs
-   (Bidirectional CCH Search)      (Road Block / Congestion)
-         [ < 0.1 ms ]                           │
-                │                               ▼
-                │                  Map Event to G_c via Delta-Index
-                │                               │
-                │                               ▼
-                │                  Incremental Repair Frontier:
-                │                   g(u) != rhs(u) (RR / D* Lite)
-                │                               │
-                │                               ▼
-                │                  Update Affected Subtree Only
-                │                               │
-                └───────────────┬───────────────┘
-                                │
-                                ▼
-                     Dynamic Fastest Path on G_c
-                                │
-                                ▼
-              ┌───────────────────────────────────┐
-              │   Fast Path Unpacker (Macro -> G) │
-              └───────────────────────────────────┘
-                                │
-                                ▼
-              Full Turn-by-Turn Route + Geometry
-                                +
-               Explainability Diagnostic Audit Log
-```
-
----
-
-## 📁 Repository Structure
+## 6. Project Architecture & Directory Layout
 
 ```text
 dynamic-route/
 ├── docs/
-│   ├── research_work.md           # Research blueprint and algorithm specifications
-│   └── WORKFLOW_AND_RESEARCH.md   # Complete architecture, research documentation & derivations
+│   ├── research_work.md           # Research blueprint and algorithmic specifications
+│   └── WORKFLOW_AND_RESEARCH.md   # Mathematical derivations and literature review
 ├── include/
 │   ├── graph/                     # Adjacency representations, node & edge definitions
-│   ├── compression/               # Graph compression: Degree-2 contraction, CCH, CSR, path unpacker
-│   ├── algorithms/                # Dijkstra, A*, Ramalingam-Reps, D* Lite, LPA*, CCH Query
-│   ├── explainability/            # Causal reasoning & diagnostics engine
-│   └── simulation/                # Traffic events & scenario generators
+│   ├── algorithms/                # Dijkstra, A*, D* Lite / LPA*, RR (optional)
+│   ├── simulation/                # Dynamic edge perturbation generators
+│   └── compression/               # Degree-2 contraction & unpacker (optional)
 ├── src/
 │   ├── graph/
-│   ├── compression/
 │   ├── algorithms/
-│   ├── explainability/
 │   ├── simulation/
+│   ├── compression/               # (optional)
 │   └── main.cpp                   # Application entry point & interactive CLI
-├── tests/                         # Unit tests & invariant verification suites
-├── benchmarks/                    # Scalability, compression ratio & speedup benchmarks
-├── data/                          # Sample road networks & synthetic datasets
+├── tests/                         # Automated invariant tests (Incremental == Dijkstra)
+├── benchmarks/                    # Scalability and speedup benchmarks
 ├── CMakeLists.txt                 # Modern CMake build configuration
 ├── .gitignore
 └── README.md
@@ -157,56 +170,17 @@ dynamic-route/
 
 ---
 
-## 🚀 Getting Started
+## 7. Phased Implementation Roadmap
 
-### Prerequisites
+### Core Phases
+- [x] **Phase 0:** Project specification, algorithmic research, and system design.
+- [ ] **Phase 1:** Core graph engine with forward/backward adjacency and $O(1)$ edge modification.
+- [ ] **Phase 2:** Baseline Dijkstra and $A^*$ implementations for ground-truth verification.
+- [ ] **Phase 3:** Incremental Heuristic Search ($D^*$ Lite / Lifelong Planning $A^*$).
+- [ ] **Phase 4:** Automated invariant test suite (`cost(Incremental) == cost(Dijkstra)`) and benchmarks.
 
-- Modern C++ compiler supporting **C++20** (GCC 11+, Clang 13+, or MSVC 2019+)
-- **CMake** (v3.20 or newer)
-- **Git**
-
-### Build Instructions
-
-```bash
-# Clone the repository
-git clone https://github.com/<your-username>/dynamic-route.git
-cd dynamic-route
-
-# Configure and build
-mkdir build && cd build
-cmake ..
-cmake --build .
-```
-
-### Running the System
-
-```bash
-# Run the interactive CLI & simulation
-./bin/dynamic_route
-
-# Run automated correctness verification tests (Verifies: Compressed == Uncompressed == Dijkstra)
-./bin/run_tests
-
-# Run benchmark comparisons (Measures speedup, latency & compression efficiency)
-./bin/run_benchmarks
-```
-
----
-
-## 🗺️ Roadmap & Workflow Phases
-
-- [x] **Phase 0:** Project specification, literature research, and architectural design.
-- [ ] **Phase 1:** Core graph engine with dual forward/backward adjacency and CSR memory layout.
-- [ ] **Phase 2:** Graph compression pipeline (Degree-2 chain contraction, shortcut manager, and path unpacker).
-- [ ] **Phase 3:** Baseline Dijkstra/A* and dynamic SSSP algorithms (Ramalingam-Reps & D* Lite) on raw and compressed graphs.
-- [ ] **Phase 4:** Contraction Hierarchies & Customizable Contraction Hierarchies (CCH) for sub-millisecond queries.
-- [ ] **Phase 5:** Automated invariant test suite (Compressed Dynamic Route == Ground Truth Dijkstra).
-- [ ] **Phase 6:** Explainability & causal diagnostics engine ("Why route changed" + compression audit).
-- [ ] **Phase 7:** Dynamic scenario simulation & large-scale benchmarking suite.
-- [ ] **Phase 8:** Interactive web dashboard with real-time graph visualization.
-
----
-
-## 📜 License
-
-This project is licensed under the MIT License - see the [LICENSE](../LICENSE) file for details.
+### Optional Extension Phases
+- [ ] **Phase 5 (Optional):** Ramalingam–Reps (RR) dynamic Single-Source Shortest Path engine.
+- [ ] **Phase 6 (Optional):** Degree-2 topological compression pipeline and path unpacker.
+- [ ] **Phase 7 (Optional):** OSM road graph importer and sophisticated traffic incident models.
+- [ ] **Phase 8 (Optional):** Memory/cache profiling (CSR layout) and interactive visualizer.
