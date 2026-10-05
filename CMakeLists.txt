@@ -43,6 +43,8 @@ set(INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include)
 # ---------------------------------------------------------------------------
 add_library(dynamic_route_core STATIC
     src/graph/graph.cpp
+    src/graph/graph_io.cpp
+    src/graph/path_validator.cpp
     src/algorithms/dijkstra.cpp
     src/algorithms/a_star.cpp
     src/algorithms/lpa_star.cpp
