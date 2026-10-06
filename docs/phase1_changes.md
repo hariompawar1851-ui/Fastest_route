@@ -31,8 +31,12 @@ a validation harness.
 | `src/algorithms/ramalingam_reps.cpp` | **Rewritten** | Real incremental SPT repair (not full Dijkstra) |
 | `src/graph/graph_io.cpp` | **New** | Generator + file loader implementations |
 | `src/graph/path_validator.cpp` | **New** | Validator + stress test implementations |
+| `include/graph/node.hpp` | **Updated** | Added node metadata (`node_type`) |
+| `include/graph/edge.hpp` | **Updated** | Added road metadata (`road_type`, `capacity`, `max_speed`) |
+| `include/graph/graph.hpp` & `src/graph/graph.cpp` | **Updated** | Added $O(1)$ edge index hash map and metadata methods |
 | `CMakeLists.txt` | **Updated** | Added `graph_io.cpp` and `path_validator.cpp` to core lib |
-| `tests/test_main.cpp` | **Updated** | Tests 6–10 added for Phase 1 components |
+| `tests/test_main.cpp` | **Updated** | Tests 6–13 added for Phase 1 components |
+| `docs/phase1_code_explanation.md` | **New** | Comprehensive architecture, changes & code explanation |
 
 ---
 
@@ -225,15 +229,15 @@ incremental algorithms against the Dijkstra ground truth.
 
 --- Phase 1: Core DSA Engine ---
 [Test 6] ShortestPathTree — SPT construction & subtree ops... PASSED
-[Test 7] Ramalingam-Reps: incremental repair on edge cost increase... PASSED
-         (dist=6, invalidated=3, relaxed=2)
+[Test 7] Ramalingam-Reps: incremental repair on edge cost increase... PASSED (dist=6, invalidated=3, relaxed=2)
 [Test 8] Ramalingam-Reps: incremental improvement on edge cost decrease... PASSED
-[Test 9] GraphIO: Grid & Random Geometric Graph generators... PASSED
-         (grid edges=48, RGG edges=792)
-[Test 10] PathValidator: walk validation & Dijkstra comparison... PASSED
-          (stress_test: 5/5 steps verified)
+[Test 9] GraphIO: Grid & Random Geometric Graph generators... PASSED (grid edges=48, RGG edges=792)
+[Test 10] PathValidator: walk validation & Dijkstra comparison... PASSED (stress_test: 5/5 steps verified)
+[Test 11] Graph Metadata & O(1) Edge Lookup... PASSED
+[Test 12] GraphIO: File Export & Load Round-Trip... PASSED
+[Test 13] Ramalingam-Reps: Path Reconstruction & Walk Validity... PASSED
 
-✅ ALL 10 TESTS PASSED!
+✅ ALL 13 TESTS PASSED!
 ```
 
 ---

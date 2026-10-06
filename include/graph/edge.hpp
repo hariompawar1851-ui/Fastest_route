@@ -12,6 +12,9 @@ struct Edge {
     NodeId to{0};
     double weight{1.0};
     bool is_blocked{false};
+    std::string road_type{"standard"}; // e.g. "motorway", "primary", "secondary", "residential"
+    double capacity{100.0};             // vehicles/minute or flow capacity
+    double max_speed{50.0};             // km/h
 
     double effective_weight() const noexcept {
         return is_blocked ? INF_WEIGHT : weight;

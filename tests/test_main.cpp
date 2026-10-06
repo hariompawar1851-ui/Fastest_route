@@ -280,6 +280,93 @@ void test_path_validator() {
     std::cout << "PASSED (stress_test: " << passed_steps << "/5 steps verified)\n";
 }
 
+void test_metadata_and_o1_lookup() {
+    std::cout << "[Test 11] Graph Metadata & O(1) Edge Lookup... ";
+    dynamic_route::Graph g;
+    auto n0 = g.add_node(0.0, 0.0, "Junction_A", "roundabout");
+    auto n1 = g.add_node(10.0, 0.0, "Junction_B", "intersection");
+
+    assert(g.get_node(n0).node_type == "roundabout");
+    assert(g.get_node(n1).node_type == "intersection");
+
+    g.add_directed_edge(n0, n1, 4.5, "motorway", 250.0, 100.0);
+
+    const auto* edge_ptr = g.get_edge(n0, n1);
+    assert(edge_ptr != nullptr);
+    assert(edge_ptr->road_type == "motorway");
+    assert(edge_ptr->capacity == 250.0);
+    assert(edge_ptr->max_speed == 100.0);
+    assert(std::abs(edge_ptr->effective_weight() - 4.5) < 1e-9);
+    (void)edge_ptr;
+
+    // O(1) weight update
+    bool updated = g.update_edge_weight(n0, n1, 2.0);
+    assert(updated);
+    assert(std::abs(g.get_edge_weight(n0, n1).value() - 2.0) < 1e-9);
+    (void)updated;
+
+    // Non-existent edge query returns nullopt / nullptr
+    assert(!g.get_edge_weight(n1, n0).has_value());
+    assert(g.get_edge(n1, n0) == nullptr);
+
+    std::cout << "PASSED\n";
+}
+
+void test_graph_io_file_roundtrip() {
+    std::cout << "[Test 12] GraphIO: File Export & Load Round-Trip... ";
+    auto g_orig = dynamic_route::GraphIO::make_grid(3, 3, 2.0);
+    const std::string tmp_file = "/tmp/dynamic_route_test_roundtrip.txt";
+
+    bool saved = dynamic_route::GraphIO::save_edge_list(g_orig, tmp_file);
+    assert(saved);
+    (void)saved;
+
+    auto g_loaded = dynamic_route::GraphIO::load_edge_list(tmp_file);
+    assert(g_loaded.num_nodes() == g_orig.num_nodes());
+    assert(g_loaded.num_edges() == g_orig.num_edges());
+
+    // Verify shortest path is identical on loaded graph
+    auto d_orig   = dynamic_route::Dijkstra::find_shortest_path(g_orig, 0, 8);
+    auto d_loaded = dynamic_route::Dijkstra::find_shortest_path(g_loaded, 0, 8);
+    assert(d_orig.path_found && d_loaded.path_found);
+    assert(std::abs(d_orig.total_cost - d_loaded.total_cost) < 1e-9);
+
+    std::remove(tmp_file.c_str());
+    std::cout << "PASSED\n";
+}
+
+void test_ramalingam_reps_path_reconstruction() {
+    std::cout << "[Test 13] Ramalingam-Reps: Path Reconstruction & Walk Validity... ";
+    auto g = dynamic_route::GraphIO::make_grid(4, 4, 1.0);
+    dynamic_route::RamalingamReps rr(g, 0);
+    rr.initialize();
+
+    auto path_init = rr.get_path(15);
+    assert(!path_init.empty());
+    assert(path_init.front() == 0);
+    assert(path_init.back() == 15);
+
+    auto vr_init = dynamic_route::PathValidator::validate_walk(g, path_init, rr.get_distance(15));
+    assert(vr_init.ok);
+
+    // Block an edge along the current path
+    if (path_init.size() >= 3) {
+        auto u = path_init[1];
+        auto v = path_init[2];
+        g.set_edge_blocked(u, v, true);
+        rr.on_edge_increase(u, v, 1.0, dynamic_route::INF_WEIGHT);
+
+        auto path_repaired = rr.get_path(15);
+        assert(!path_repaired.empty());
+        auto vr_repaired = dynamic_route::PathValidator::validate_walk(g, path_repaired, rr.get_distance(15));
+        assert(vr_repaired.ok);
+
+        auto d_check = dynamic_route::Dijkstra::find_shortest_path(g, 0, 15);
+        assert(std::abs(rr.get_distance(15) - d_check.total_cost) < 1e-9);
+    }
+    std::cout << "PASSED\n";
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -302,8 +389,11 @@ int main() {
     test_ramalingam_reps_edge_decrease();
     test_graph_io_generators();
     test_path_validator();
+    test_metadata_and_o1_lookup();
+    test_graph_io_file_roundtrip();
+    test_ramalingam_reps_path_reconstruction();
 
-    std::cout << "\n✅ ALL 10 TESTS PASSED!\n";
+    std::cout << "\n✅ ALL 13 TESTS PASSED!\n";
     std::cout << "============================================================\n";
     return 0;
 }

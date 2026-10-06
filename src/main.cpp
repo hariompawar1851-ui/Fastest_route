@@ -71,7 +71,7 @@ int main() {
                   << "\n";
 
         if (dijkstra_recompute.nodes_visited > 0) {
-            double node_reduction = (1.0 - (double)lpa_repair.nodes_visited / dijkstra_recompute.nodes_visited) * 100.0;
+            double node_reduction = (1.0 - static_cast<double>(lpa_repair.nodes_visited) / static_cast<double>(dijkstra_recompute.nodes_visited)) * 100.0;
             std::cout << "⚡ Node Expansion Reduction: " << node_reduction << "%\n";
         }
     }

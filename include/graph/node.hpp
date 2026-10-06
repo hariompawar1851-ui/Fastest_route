@@ -16,6 +16,7 @@ struct Node {
     NodeId id{0};
     Coordinates coords{0.0, 0.0};
     std::string label{""};
+    std::string node_type{"intersection"}; // e.g., "intersection", "roundabout", "junction"
 
     bool operator==(const Node& other) const noexcept {
         return id == other.id;
