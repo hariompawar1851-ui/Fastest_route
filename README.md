@@ -157,10 +157,12 @@ cmake --build .
 
 ### Core Phases
 - [x] **Phase 0:** Project specification, algorithmic research, and system design.
-- [ ] **Phase 1:** Core graph engine with forward/backward adjacency and $O(1)$ edge modification.
-- [ ] **Phase 2:** Baseline Dijkstra and $A^*$ implementations for ground-truth verification.
-- [ ] **Phase 3:** Incremental Heuristic Search ($D^*$ Lite / Lifelong Planning $A^*$).
-- [ ] **Phase 4:** Automated invariant test suite (`cost(Incremental) == cost(Dijkstra)`) and benchmarks.
+- [x] **Phase 1:** Core graph engine with forward/backward adjacency, $O(1)$ edge modification, SPT, RR, GraphIO, PathValidator (13/13 tests passing).
+- [x] **Phase 2, Part 1:** Large-scale invariant stress testing — 1,000+ perturbations on grids and RGGs; three-way LPA\* == D\* Lite == RR == Dijkstra agreement; RR locality ratio verified < 15% (6/6 tests passing). See [`docs/phase2_plan.md`](docs/phase2_plan.md).
+- [x] **Phase 2, Part 2:** Explainability & Diagnostics Engine — JSON causal audit log per perturbation (`AuditLogger`, `CausalReporter`, NDJSON serialization, Tests 20–22 passing).
+- [x] **Phase 2, Part 3:** Advanced Traffic Simulator — corridor congestion waves, DisasterZone events, TTL recovery engine, `ScenarioRunner` (Tests 23–26 passing).
+- [ ] **Phase 3:** Incremental Heuristic Search ($D^*$ Lite / Lifelong Planning $A^*$) — advanced extensions.
+- [ ] **Phase 4:** Scalability benchmarks on OSM / DIMACS real road networks.
 
 ### Optional Extension Phases
 - [ ] **Phase 5 (Optional):** Ramalingam–Reps (RR) dynamic Single-Source Shortest Path engine.

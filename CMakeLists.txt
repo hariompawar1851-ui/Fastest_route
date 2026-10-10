@@ -51,6 +51,10 @@ add_library(dynamic_route_core STATIC
     src/algorithms/d_star_lite.cpp
     src/algorithms/ramalingam_reps.cpp
     src/simulation/event_simulator.cpp
+    src/simulation/traffic_scenario.cpp
+    src/simulation/scenario_runner.cpp
+    src/diagnostics/audit_log.cpp
+    src/diagnostics/causal_reporter.cpp
     src/compression/degree2_compressor.cpp
 )
 
@@ -64,7 +68,7 @@ target_include_directories(dynamic_route PRIVATE ${INCLUDE_DIR})
 target_link_libraries(dynamic_route PRIVATE dynamic_route_core)
 
 # ---------------------------------------------------------------------------
-# Executable: run_tests  (invariant verification suite)
+# Executable: run_tests  (Complete test suite — Phase 0 + Phase 1 + Phase 2)
 # ---------------------------------------------------------------------------
 add_executable(run_tests tests/test_main.cpp)
 target_include_directories(run_tests PRIVATE ${INCLUDE_DIR})
@@ -81,11 +85,14 @@ target_link_libraries(run_benchmarks PRIVATE dynamic_route_core)
 # Enable CTest  (optional: wire run_tests into ctest)
 # ---------------------------------------------------------------------------
 enable_testing()
-add_test(NAME InvariantTests COMMAND run_tests)
+add_test(NAME FullTestSuite COMMAND run_tests)
 
 # ---------------------------------------------------------------------------
 # Install (optional, for packaging)
 # ---------------------------------------------------------------------------
-install(TARGETS dynamic_route run_tests run_benchmarks
+install(TARGETS
+    dynamic_route
+    run_tests
+    run_benchmarks
     RUNTIME DESTINATION bin
 )

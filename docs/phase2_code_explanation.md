@@ -33,7 +33,7 @@ All 13 new tests (14–26) pass. The total project test suite is now **26 tests 
 
 ## 2. Part 1 — Large-Scale Invariant Stress Testing
 
-### File: `tests/test_phase2_part1.cpp`
+### Test Suite: `tests/test_main.cpp` (Tests 14–19)
 
 **Core invariant under test:**
 ```
@@ -299,16 +299,15 @@ Returns a `ScenarioRunnerReport` with total events, recoveries, and per-algorith
 
 ## 5. CMakeLists.txt Changes
 
-Three new test executables added and compiled from `dynamic_route_core`:
+All tests are consolidated into a single executable `run_tests` running `tests/test_main.cpp`:
 
 ```cmake
-add_executable(run_tests_phase2_part1 tests/test_phase2_part1.cpp)
-add_executable(run_tests_phase2_part2 tests/test_phase2_part2.cpp)
-add_executable(run_tests_phase2_part3 tests/test_phase2_part3.cpp)
+add_executable(run_tests tests/test_main.cpp)
+target_include_directories(run_tests PRIVATE ${INCLUDE_DIR})
+target_link_libraries(run_tests PRIVATE dynamic_route_core)
 
-add_test(NAME Phase2Part1StressTests      COMMAND run_tests_phase2_part1)
-add_test(NAME Phase2Part2DiagnosticsTests COMMAND run_tests_phase2_part2)
-add_test(NAME Phase2Part3TrafficSimTests  COMMAND run_tests_phase2_part3)
+enable_testing()
+add_test(NAME FullTestSuite COMMAND run_tests)
 ```
 
 All new source files (`audit_log.cpp`, `causal_reporter.cpp`, `traffic_scenario.cpp`, `scenario_runner.cpp`) are compiled into the shared `dynamic_route_core` static library.
@@ -408,14 +407,9 @@ Every NDJSON line emitted by `AuditLogger::write_ndjson()`:
 # Build all targets (from project root)
 cmake --build build -j4
 
-# Run Phase 2 tests individually
-./bin/run_tests_phase2_part1   # Tests 14-19
-./bin/run_tests_phase2_part2   # Tests 20-22
-./bin/run_tests_phase2_part3   # Tests 23-26
+# Run complete consolidated test suite (all 26 tests across Phase 0, 1, and 2)
+./bin/run_tests
 
-# Run complete suite (all 26 tests)
-./bin/run_tests && ./bin/run_tests_phase2_part1 && ./bin/run_tests_phase2_part2 && ./bin/run_tests_phase2_part3
-
-# Or via CTest
-cd build && ctest --verbose
+# Or run via CTest
+ctest --test-dir build --output-on-failure
 ```

@@ -20,9 +20,9 @@ large Random Geometric Graphs up to ~500 nodes in fast CI).
 
 | File | Type | Description |
 |---|---|---|
-| `tests/test_phase2_part1.cpp` | **New** | 6 new tests (14–19) |
-| `docs/phase2_plan.md` | **New** | This roadmap |
-| `CMakeLists.txt` | **Updated** | Added `run_tests_phase2_part1` target |
+| `tests/test_main.cpp` | **Updated** | All 26 tests (Phases 0, 1, and 2 Parts 1–3) consolidated into single suite |
+| `docs/phase2_plan.md` | **Updated** | This roadmap |
+| `CMakeLists.txt` | **Updated** | Single test target `run_tests` |
 
 ### Tests Added
 
@@ -40,8 +40,8 @@ large Random Geometric Graphs up to ~500 nodes in fast CI).
 ```bash
 cd build
 cmake ..
-cmake --build . --target run_tests_phase2_part1
-./bin/run_tests_phase2_part1
+cmake --build .
+./bin/run_tests
 ```
 
 ---
@@ -61,7 +61,7 @@ cmake --build . --target run_tests_phase2_part1
 | `include/diagnostics/audit_log.hpp` | **New** | `AuditEntry` struct + `AuditLogger` class |
 | `src/diagnostics/audit_log.cpp` | **New** | JSON serialisation of audit entries |
 | `include/diagnostics/causal_reporter.hpp` | **New** | Wraps any algorithm with logging hooks |
-| `tests/test_phase2_part2.cpp` | **New** | Tests 20–22: audit log correctness |
+| `tests/test_main.cpp` | **Updated** | Tests 20–22: audit log correctness |
 | `docs/phase2_part2_design.md` | **New** | Design spec and JSON schema |
 
 ### JSON Output Schema (draft)
@@ -98,7 +98,7 @@ traffic scenario engine:
 | `src/simulation/traffic_scenario.cpp` | **New** | Scenario generators + TTL recovery engine |
 | `include/simulation/scenario_runner.hpp` | **New** | Multi-event timeline orchestrator |
 | `src/simulation/scenario_runner.cpp` | **New** | Timeline playback + correctness logging |
-| `tests/test_phase2_part3.cpp` | **New** | Tests 23–26 |
+| `tests/test_main.cpp` | **Updated** | Tests 23–26: traffic scenario verification |
 | `docs/phase2_part3_design.md` | **New** | Traffic scenario design spec |
 
 ---
