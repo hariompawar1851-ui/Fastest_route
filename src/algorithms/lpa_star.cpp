@@ -11,9 +11,11 @@ LifelongPlanningAStar::LifelongPlanningAStar(const Graph& graph, NodeId source, 
     g_.assign(n, INF_WEIGHT);
     rhs_.assign(n, INF_WEIGHT);
     in_open_list_.assign(n, false);
+    queued_key_.assign(n, LPAKey{0.0, 0.0});
 
     rhs_[source_] = 0.0;
-    open_list_.insert({calculate_key(source_), source_});
+    queued_key_[source_] = calculate_key(source_);
+    open_list_.insert({queued_key_[source_], source_});
     in_open_list_[source_] = true;
 }
 
@@ -41,17 +43,14 @@ void LifelongPlanningAStar::update_vertex(NodeId u) {
     }
 
     if (in_open_list_[u]) {
-        for (auto it = open_list_.begin(); it != open_list_.end(); ++it) {
-            if (it->second == u) {
-                open_list_.erase(it);
-                in_open_list_[u] = false;
-                break;
-            }
-        }
+        // O(log n): erase the exact (key, node) element we inserted earlier.
+        open_list_.erase({queued_key_[u], u});
+        in_open_list_[u] = false;
     }
 
     if (std::abs(g_[u] - rhs_[u]) > 1e-9) {
-        open_list_.insert({calculate_key(u), u});
+        queued_key_[u] = calculate_key(u);
+        open_list_.insert({queued_key_[u], u});
         in_open_list_[u] = true;
     }
 }
@@ -140,6 +139,19 @@ double LifelongPlanningAStar::get_g_value(NodeId u) const {
 
 double LifelongPlanningAStar::get_rhs_value(NodeId u) const {
     return (u < rhs_.size()) ? rhs_[u] : INF_WEIGHT;
+}
+
+bool LifelongPlanningAStar::queue_invariant_holds() const {
+    std::size_t flagged = 0;
+    for (NodeId u = 0; u < g_.size(); ++u) {
+        const bool inconsistent = std::abs(g_[u] - rhs_[u]) > 1e-9;
+        if (inconsistent != in_open_list_[u]) return false;
+        if (in_open_list_[u]) {
+            ++flagged;
+            if (open_list_.find({queued_key_[u], u}) == open_list_.end()) return false;
+        }
+    }
+    return flagged == open_list_.size();
 }
 
 } // namespace dynamic_route

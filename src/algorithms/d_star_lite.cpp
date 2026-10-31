@@ -10,9 +10,13 @@ DStarLite::DStarLite(const Graph& graph, NodeId start, NodeId goal)
     const std::size_t n = graph_.num_nodes();
     g_.assign(n, INF_WEIGHT);
     rhs_.assign(n, INF_WEIGHT);
+    in_open_list_.assign(n, false);
+    queued_key_.assign(n, LPAKey{0.0, 0.0});
 
     rhs_[goal_] = 0.0;
-    open_list_.insert({calculate_key(goal_), goal_});
+    queued_key_[goal_] = calculate_key(goal_);
+    open_list_.insert({queued_key_[goal_], goal_});
+    in_open_list_[goal_] = true;
 }
 
 double DStarLite::heuristic(NodeId u, NodeId v) const {
@@ -38,16 +42,16 @@ void DStarLite::update_vertex(NodeId u) {
         rhs_[u] = min_rhs;
     }
 
-    // Remove u if in open list
-    for (auto it = open_list_.begin(); it != open_list_.end(); ++it) {
-        if (it->second == u) {
-            open_list_.erase(it);
-            break;
-        }
+    // O(log n): erase the exact (key, node) element we inserted earlier.
+    if (in_open_list_[u]) {
+        open_list_.erase({queued_key_[u], u});
+        in_open_list_[u] = false;
     }
 
     if (std::abs(g_[u] - rhs_[u]) > 1e-9) {
-        open_list_.insert({calculate_key(u), u});
+        queued_key_[u] = calculate_key(u);
+        open_list_.insert({queued_key_[u], u});
+        in_open_list_[u] = true;
     }
 }
 
@@ -67,10 +71,13 @@ SearchResult DStarLite::compute_shortest_path() {
         }
 
         open_list_.erase(top_it);
+        in_open_list_[u] = false;
         LPAKey k_new = calculate_key(u);
 
         if (k_old < k_new) {
+            queued_key_[u] = k_new;
             open_list_.insert({k_new, u});
+            in_open_list_[u] = true;
         } else if (g_[u] > rhs_[u]) {
             g_[u] = rhs_[u];
             ++expansions;
@@ -90,6 +97,7 @@ SearchResult DStarLite::compute_shortest_path() {
     auto end_time = std::chrono::high_resolution_clock::now();
     result.duration_micros = std::chrono::duration<double, std::micro>(end_time - start_time).count();
     result.nodes_visited = expansions;
+    total_expansions_ += expansions;
 
     if (g_[start_] < INF_WEIGHT) {
         result.path_found = true;
@@ -140,6 +148,19 @@ double DStarLite::get_g_value(NodeId u) const {
 
 double DStarLite::get_rhs_value(NodeId u) const {
     return (u < rhs_.size()) ? rhs_[u] : INF_WEIGHT;
+}
+
+bool DStarLite::queue_invariant_holds() const {
+    std::size_t flagged = 0;
+    for (NodeId u = 0; u < g_.size(); ++u) {
+        const bool inconsistent = std::abs(g_[u] - rhs_[u]) > 1e-9;
+        if (inconsistent != in_open_list_[u]) return false;
+        if (in_open_list_[u]) {
+            ++flagged;
+            if (open_list_.find({queued_key_[u], u}) == open_list_.end()) return false;
+        }
+    }
+    return flagged == open_list_.size();
 }
 
 } // namespace dynamic_route

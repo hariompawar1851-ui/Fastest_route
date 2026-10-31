@@ -49,6 +49,7 @@ add_library(dynamic_route_core STATIC
     src/algorithms/a_star.cpp
     src/algorithms/lpa_star.cpp
     src/algorithms/d_star_lite.cpp
+    src/algorithms/route_navigator.cpp
     src/algorithms/ramalingam_reps.cpp
     src/simulation/event_simulator.cpp
     src/simulation/traffic_scenario.cpp

@@ -1,5 +1,5 @@
 // =============================================================================
-// DynamicRoute — Complete Test Suite  (Phase 0 + Phase 1 + Phase 2)
+// DynamicRoute — Complete Test Suite  (Phase 0 + Phase 1 + Phase 2 + Phase 3)
 // =============================================================================
 // Tests 1–5   : Phase 0 — baseline correctness of all static + incremental algorithms
 // Tests 6–13  : Phase 1 — ShortestPathTree, Ramalingam-Reps (real impl),
@@ -7,6 +7,7 @@
 // Tests 14–19 : Phase 2, Part 1 — large-scale invariant stress testing
 // Tests 20–22 : Phase 2, Part 2 — explainability & diagnostics engine
 // Tests 23–26 : Phase 2, Part 3 — advanced traffic simulator
+// Tests 27–31 : Phase 3 — indexed-queue LPA*/D* Lite, moving-agent D* Lite navigation
 // =============================================================================
 
 #include "graph/graph.hpp"
@@ -18,6 +19,7 @@
 #include "algorithms/lpa_star.hpp"
 #include "algorithms/d_star_lite.hpp"
 #include "algorithms/ramalingam_reps.hpp"
+#include "algorithms/route_navigator.hpp"
 #include "simulation/event_simulator.hpp"
 #include "simulation/traffic_scenario.hpp"
 #include "simulation/scenario_runner.hpp"
@@ -1061,12 +1063,220 @@ void test26_scenario_runner_composite() {
 }
 
 // ===========================================================================
+// Phase 3 — Indexed-queue incremental search & moving-agent D* Lite
+// ===========================================================================
+
+void test27_indexed_queue_invariants() {
+    std::cout << "[Test 27] Indexed queue: LPA* & D* Lite queue invariant + Dijkstra agreement (300 steps)... ";
+    std::cout.flush();
+
+    auto g_lpa = dynamic_route::GraphIO::make_grid(20, 20, 1.0);
+    auto g_dst = dynamic_route::GraphIO::make_grid(20, 20, 1.0);
+    const dynamic_route::NodeId src = 0, tgt = 399;
+
+    dynamic_route::LifelongPlanningAStar lpa(g_lpa, src, tgt);
+    dynamic_route::DStarLite dstar(g_dst, src, tgt);
+    lpa.compute_shortest_path();
+    dstar.compute_shortest_path();
+    assert(lpa.queue_invariant_holds());
+    assert(dstar.queue_invariant_holds());
+
+    dynamic_route::EventSimulator sim_a(7), sim_b(7);   // identical event streams
+    for (int step = 0; step < 300; ++step) {
+        auto ea = sim_a.generate_random_event(g_lpa);
+        auto eb = sim_b.generate_random_event(g_dst);
+        lpa.on_edge_changed(ea.from, ea.to, ea.new_weight);
+        dstar.on_edge_changed(eb.from, eb.to, eb.new_weight);
+
+        auto ra = lpa.compute_shortest_path();
+        auto rb = dstar.compute_shortest_path();
+        auto ref = dynamic_route::Dijkstra::find_shortest_path(g_lpa, src, tgt);
+
+        assert(lpa.queue_invariant_holds());
+        assert(dstar.queue_invariant_holds());
+        assert(ra.path_found == ref.path_found);
+        assert(rb.path_found == ref.path_found);
+        if (ref.path_found) {
+            assert(std::abs(ra.total_cost - ref.total_cost) < 1e-6);
+            assert(std::abs(rb.total_cost - ref.total_cost) < 1e-6);
+        }
+    }
+    assert(lpa.total_expansions() > 0);
+    assert(dstar.total_expansions() > 0);
+
+    std::cout << "PASSED (LPA* exp=" << lpa.total_expansions()
+              << ", D* Lite exp=" << dstar.total_expansions() << ")\n";
+}
+
+void test28_navigator_static_world() {
+    std::cout << "[Test 28] RouteNavigator - static world follows optimal route (15x15 grid)... ";
+    std::cout.flush();
+
+    auto g = dynamic_route::GraphIO::make_grid(15, 15, 1.0);
+    dynamic_route::RouteNavigator nav(g, 0, 224);
+    auto rep = nav.run(nullptr, 0, /*verify=*/true);
+
+    assert(rep.reached_goal);
+    assert(!rep.blocked);
+    assert(std::abs(rep.initial_cost - 28.0) < 1e-6);
+    assert(std::abs(rep.travelled_cost - 28.0) < 1e-6);
+    assert(rep.moves == 28);
+    assert(rep.trajectory.size() == 29);
+    assert(rep.trajectory.front() == 0 && rep.trajectory.back() == 224);
+    assert(rep.replans == 0 && rep.total_events == 0);
+    assert(rep.mismatches == 0);
+    assert(rep.verified_steps == 29);   // initial + one per hop
+
+    // start == goal is a trivial, already-arrived navigation.
+    dynamic_route::RouteNavigator same(g, 5, 5);
+    auto rep0 = same.run();
+    assert(rep0.reached_goal && rep0.moves == 0 && rep0.travelled_cost == 0.0);
+
+    std::cout << "PASSED (28 hops, cost=" << rep.travelled_cost
+              << ", repair expansions=" << rep.incremental_expansions << ")\n";
+}
+
+void test29_navigator_random_dynamics() {
+    std::cout << "[Test 29] RouteNavigator - random dynamics, per-hop D* Lite == Dijkstra (3 seeds, 20x20)... ";
+    std::cout.flush();
+
+    std::size_t total_verified = 0, reached = 0, blocked = 0;
+    for (std::uint32_t seed : {11u, 22u, 33u}) {
+        auto g = dynamic_route::GraphIO::make_grid(20, 20, 1.0);
+        dynamic_route::EventSimulator sim(seed);
+        dynamic_route::RouteNavigator nav(g, 0, 399);
+
+        auto provider = [&sim](std::size_t, dynamic_route::Graph& graph,
+                               dynamic_route::NodeId) {
+            return std::vector<dynamic_route::PerturbationEvent>{
+                sim.generate_random_event(graph)};
+        };
+
+        auto rep = nav.run(provider, 0, /*verify=*/true);
+        assert(rep.mismatches == 0);
+        assert(!rep.step_limit_hit);
+        assert(rep.reached_goal != rep.blocked);   // exactly one terminal state
+        assert(rep.trajectory.front() == 0);
+        assert(rep.steps.size() == rep.moves);
+        assert(rep.trajectory.size() == rep.moves + 1);
+
+        // Every hop of the trajectory must be a real edge of the graph.
+        for (std::size_t i = 1; i < rep.trajectory.size(); ++i) {
+            assert(g.get_edge(rep.trajectory[i - 1], rep.trajectory[i]) != nullptr);
+        }
+        if (rep.reached_goal) {
+            assert(rep.trajectory.back() == 399);
+            assert(rep.travelled_cost >= rep.initial_cost - 1e-6);
+            ++reached;
+        } else {
+            ++blocked;
+        }
+        total_verified += rep.verified_steps;
+    }
+
+    std::cout << "PASSED (" << total_verified << " steps verified; "
+              << reached << " reached, " << blocked << " blocked)\n";
+}
+
+void test30_navigator_detour_and_unreachable() {
+    std::cout << "[Test 30] RouteNavigator - forced detour + unreachable goal... ";
+    std::cout.flush();
+
+    // ---- Forced detour on a 6x6 grid ----------------------------------
+    {
+        auto g = dynamic_route::GraphIO::make_grid(6, 6, 1.0);
+        dynamic_route::RouteNavigator nav(g, 0, 35);
+
+        auto provider = [](std::size_t step, dynamic_route::Graph& graph,
+                           dynamic_route::NodeId pos) {
+            std::vector<dynamic_route::PerturbationEvent> evs;
+            if (step != 0) return evs;
+            // Block the road the optimal route would take two hops ahead.
+            auto plan = dynamic_route::Dijkstra::find_shortest_path(graph, pos, 35);
+            if (plan.path.size() >= 3) {
+                auto a = plan.path[1], b = plan.path[2];
+                for (auto [u, v] : {std::pair{a, b}, std::pair{b, a}}) {
+                    graph.set_edge_blocked(u, v, true);
+                    evs.push_back({u, v, 1.0, dynamic_route::INF_WEIGHT, true});
+                }
+            }
+            return evs;
+        };
+
+        auto rep = nav.run(provider, 0, /*verify=*/true);
+        assert(rep.reached_goal);
+        assert(rep.mismatches == 0);
+        assert(rep.total_events == 2 && rep.replans == 1);
+        // Grid detours around a single blocked edge cost at most +2 here.
+        assert(rep.travelled_cost >= 10.0 - 1e-6);
+        assert(rep.travelled_cost <= 12.0 + 1e-6);
+    }
+
+    // ---- Goal becomes unreachable on a chain 0-1-2-3-4 ----------------
+    {
+        dynamic_route::Graph chain;
+        for (int i = 0; i < 5; ++i) chain.add_node(static_cast<double>(i), 0.0);
+        for (dynamic_route::NodeId i = 0; i < 4; ++i) chain.add_undirected_edge(i, i + 1, 1.0);
+
+        dynamic_route::RouteNavigator nav(chain, 0, 4);
+        auto provider = [](std::size_t step, dynamic_route::Graph& graph,
+                           dynamic_route::NodeId) {
+            std::vector<dynamic_route::PerturbationEvent> evs;
+            if (step == 0) {
+                graph.set_edge_blocked(3, 4, true);
+                graph.set_edge_blocked(4, 3, true);
+                evs.push_back({3, 4, 1.0, dynamic_route::INF_WEIGHT, true});
+                evs.push_back({4, 3, 1.0, dynamic_route::INF_WEIGHT, true});
+            }
+            return evs;
+        };
+
+        auto rep = nav.run(provider, 0, /*verify=*/true);
+        assert(!rep.reached_goal);
+        assert(rep.blocked);
+        assert(rep.mismatches == 0);
+        assert(rep.moves == 1);
+    }
+
+    std::cout << "PASSED (detour cost within [10,12]; unreachable chain detected)\n";
+}
+
+void test31_navigator_efficiency() {
+    std::cout << "[Test 31] RouteNavigator - D* Lite repairs expand fewer nodes than Dijkstra-per-hop (40x40)... ";
+    std::cout.flush();
+
+    auto g = dynamic_route::GraphIO::make_grid(40, 40, 1.0);
+    dynamic_route::EventSimulator sim(2024);
+    dynamic_route::RouteNavigator nav(g, 0, 1599);
+
+    auto provider = [&sim](std::size_t step, dynamic_route::Graph& graph,
+                           dynamic_route::NodeId) {
+        std::vector<dynamic_route::PerturbationEvent> evs;
+        if (step % 3 == 0) evs.push_back(sim.generate_random_event(graph));
+        return evs;
+    };
+
+    auto rep = nav.run(provider, 0, /*verify=*/true);
+    assert(rep.mismatches == 0);
+    assert(rep.reached_goal || rep.blocked);
+
+    const std::size_t incremental = rep.initial_expansions + rep.incremental_expansions;
+    assert(rep.baseline_expansions > 0);
+    assert(incremental < rep.baseline_expansions);
+
+    double reduction = (1.0 - static_cast<double>(incremental) /
+                              static_cast<double>(rep.baseline_expansions)) * 100.0;
+    std::printf("PASSED (D* Lite %zu vs Dijkstra %zu expansions, %.1f%% fewer)\n",
+                incremental, rep.baseline_expansions, reduction);
+}
+
+// ===========================================================================
 // main
 // ===========================================================================
 
 int main() {
     std::cout << "============================================================\n";
-    std::cout << "  DynamicRoute - Complete Test Suite (Phase 0 + 1 + 2)\n";
+    std::cout << "  DynamicRoute - Complete Test Suite (Phase 0 + 1 + 2 + 3)\n";
     std::cout << "============================================================\n\n";
 
     // ---- Phase 0 ----
@@ -1110,8 +1320,16 @@ int main() {
     test25_recovery_event_ttl();
     test26_scenario_runner_composite();
 
+    // ---- Phase 3 ----
+    std::cout << "\n--- Phase 3: Indexed Queue & Moving-Agent D* Lite ---\n";
+    test27_indexed_queue_invariants();
+    test28_navigator_static_world();
+    test29_navigator_random_dynamics();
+    test30_navigator_detour_and_unreachable();
+    test31_navigator_efficiency();
+
     std::cout << "\n============================================================\n";
-    std::cout << " ALL 26 TESTS PASSED!\n";
+    std::cout << " ALL 31 TESTS PASSED!\n";
     std::cout << "============================================================\n";
     return 0;
 }
