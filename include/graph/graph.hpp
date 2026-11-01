@@ -48,7 +48,7 @@ public:
 
 private:
     static constexpr std::uint64_t edge_key(NodeId u, NodeId v) noexcept {
-        return (static_cast<std::uint64_t>(u) << 32) | static_cast<std::uint64_t>(v);
+        return (static_cast<std::uint64_t>(u) << 32) | (static_cast<std::uint64_t>(v) & 0xFFFFFFFFULL);
     }
 
     std::vector<Node> nodes_;

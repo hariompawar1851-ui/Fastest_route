@@ -72,8 +72,8 @@ void ScenarioRunner::register_lpa(LifelongPlanningAStar& lpa,
     AlgoEntry entry;
     entry.name = name;
     entry.log  = &log;
-    entry.on_change = [&lpa](NodeId f, NodeId t, double w) {
-        lpa.on_edge_changed(f, t, w);
+    entry.on_change = [&lpa](const PerturbationEvent& ev) {
+        lpa.on_edge_changed(ev.from, ev.to, ev.new_weight);
     };
     entry.query = [&lpa]() -> SearchResult {
         return lpa.compute_shortest_path();
@@ -87,8 +87,8 @@ void ScenarioRunner::register_dstar(DStarLite& dstar,
     AlgoEntry entry;
     entry.name = name;
     entry.log  = &log;
-    entry.on_change = [&dstar](NodeId f, NodeId t, double w) {
-        dstar.on_edge_changed(f, t, w);
+    entry.on_change = [&dstar](const PerturbationEvent& ev) {
+        dstar.on_edge_changed(ev.from, ev.to, ev.new_weight);
     };
     entry.query = [&dstar]() -> SearchResult {
         return dstar.compute_shortest_path();
@@ -102,14 +102,12 @@ void ScenarioRunner::register_rr(RamalingamReps& rr,
     AlgoEntry entry;
     entry.name = name;
     entry.log  = &log;
-    // RR has on_edge_increase / decrease; we need old weight to dispatch
-    entry.on_change = [&rr, &graph = graph_](NodeId f, NodeId t, double new_w) {
-        auto old_opt = graph.get_edge_weight(f, t);
-        double old_w = old_opt.value_or(INF_WEIGHT);
-        if (new_w >= old_w)
-            rr.on_edge_increase(f, t, old_w, new_w);
+    // RR uses exact old_weight and new_weight from the event
+    entry.on_change = [&rr](const PerturbationEvent& ev) {
+        if (ev.new_weight >= ev.old_weight)
+            rr.on_edge_increase(ev.from, ev.to, ev.old_weight, ev.new_weight);
         else
-            rr.on_edge_decrease(f, t, old_w, new_w);
+            rr.on_edge_decrease(ev.from, ev.to, ev.old_weight, ev.new_weight);
     };
     // RR query: build a SearchResult from get_distance / get_path
     entry.query = [&rr, tgt = target_]() -> SearchResult {
@@ -136,7 +134,7 @@ void ScenarioRunner::notify_and_record(const PerturbationEvent& event, int /*tic
         double repair_us = 0.0;
         {
             ScopedTimer timer(repair_us);
-            algo.on_change(event.from, event.to, event.new_weight);
+            algo.on_change(event);
         }
 
         // Query
@@ -239,7 +237,11 @@ ScenarioRunnerReport ScenarioRunner::run(int total_ticks) {
                 graph_.update_edge_weight(from, to, new_w);
             }
 
-            tick_events.push_back(PerturbationEvent{from, to, cur_w, new_w, is_block});
+            auto ev = PerturbationEvent{from, to, cur_w, new_w, is_block};
+            tick_events.push_back(ev);
+            for (auto* rec : recovery_trackers_) {
+                rec->record_perturbation(ev);
+            }
         }
 
         // ---- 4. Notify all algorithms of every event this tick ----

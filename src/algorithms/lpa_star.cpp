@@ -5,6 +5,18 @@
 
 namespace dynamic_route {
 
+namespace {
+inline bool is_consistent(double g, double rhs) noexcept {
+    if (g == rhs) return true;  // Handles INF == INF correctly without NaN arithmetic
+    return std::abs(g - rhs) <= 1e-9;
+}
+
+inline bool is_inconsistent(double g, double rhs) noexcept {
+    if (g == rhs) return false;
+    return std::abs(g - rhs) > 1e-9;
+}
+} // anonymous namespace
+
 LifelongPlanningAStar::LifelongPlanningAStar(const Graph& graph, NodeId source, NodeId target)
     : graph_(graph), source_(source), target_(target) {
     const std::size_t n = graph_.num_nodes();
@@ -48,7 +60,7 @@ void LifelongPlanningAStar::update_vertex(NodeId u) {
         in_open_list_[u] = false;
     }
 
-    if (std::abs(g_[u] - rhs_[u]) > 1e-9) {
+    if (is_inconsistent(g_[u], rhs_[u])) {
         queued_key_[u] = calculate_key(u);
         open_list_.insert({queued_key_[u], u});
         in_open_list_[u] = true;
@@ -65,7 +77,7 @@ SearchResult LifelongPlanningAStar::compute_shortest_path() {
         LPAKey top_key = top_it->first;
         LPAKey target_key = calculate_key(target_);
 
-        if (!(top_key < target_key) && std::abs(rhs_[target_] - g_[target_]) <= 1e-9) {
+        if (!(top_key < target_key) && is_consistent(rhs_[target_], g_[target_])) {
             break;
         }
 
@@ -102,6 +114,7 @@ SearchResult LifelongPlanningAStar::compute_shortest_path() {
         // Backtrack path from target to source
         NodeId curr = target_;
         result.path.push_back(curr);
+        const std::size_t n = graph_.num_nodes();
         while (curr != source_) {
             NodeId best_pred = curr;
             double best_cost = INF_WEIGHT;
@@ -114,7 +127,7 @@ SearchResult LifelongPlanningAStar::compute_shortest_path() {
                     best_pred = p;
                 }
             }
-            if (best_pred == curr || best_cost >= INF_WEIGHT) {
+            if (best_pred == curr || best_cost >= INF_WEIGHT || result.path.size() > n) {
                 result.path_found = false;
                 result.path.clear();
                 break;
@@ -144,7 +157,7 @@ double LifelongPlanningAStar::get_rhs_value(NodeId u) const {
 bool LifelongPlanningAStar::queue_invariant_holds() const {
     std::size_t flagged = 0;
     for (NodeId u = 0; u < g_.size(); ++u) {
-        const bool inconsistent = std::abs(g_[u] - rhs_[u]) > 1e-9;
+        const bool inconsistent = is_inconsistent(g_[u], rhs_[u]);
         if (inconsistent != in_open_list_[u]) return false;
         if (in_open_list_[u]) {
             ++flagged;

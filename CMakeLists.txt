@@ -69,7 +69,7 @@ target_include_directories(dynamic_route PRIVATE ${INCLUDE_DIR})
 target_link_libraries(dynamic_route PRIVATE dynamic_route_core)
 
 # ---------------------------------------------------------------------------
-# Executable: run_tests  (Complete test suite — Phase 0 + Phase 1 + Phase 2)
+# Executable: run_tests  (Complete test suite — Phase 0 + Phase 1 + Phase 2 + Phase 3)
 # ---------------------------------------------------------------------------
 add_executable(run_tests tests/test_main.cpp)
 target_include_directories(run_tests PRIVATE ${INCLUDE_DIR})

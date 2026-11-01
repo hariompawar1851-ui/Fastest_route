@@ -5,6 +5,8 @@
 #include <cmath>
 #include <numeric>
 #include <algorithm>
+#include <iomanip>
+#include <limits>
 
 namespace dynamic_route {
 
@@ -40,12 +42,13 @@ std::string AuditLogger::json_escape(const std::string& s) {
 
 std::string AuditLogger::entry_to_json(const AuditEntry& e) const {
     std::ostringstream o;
+    o << std::setprecision(std::numeric_limits<double>::max_digits10);
 
-    // Weight helper: INF → "INF" string, else numeric
+    // Weight helper: INF → "INF" string, else numeric with full precision
     auto weight_str = [](double w) -> std::string {
         if (std::isinf(w)) return "\"INF\"";
         std::ostringstream ws;
-        ws << w;
+        ws << std::setprecision(std::numeric_limits<double>::max_digits10) << w;
         return ws.str();
     };
 

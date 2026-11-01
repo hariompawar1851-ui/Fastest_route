@@ -169,8 +169,8 @@ private:
         std::string   name;
         AuditLogger*  log;
         // Unified callbacks
-        std::function<void(NodeId, NodeId, double)> on_change;
-        std::function<SearchResult()>               query;
+        std::function<void(const PerturbationEvent&)> on_change;
+        std::function<SearchResult()>                 query;
     };
     std::vector<AlgoEntry> algos_;
 

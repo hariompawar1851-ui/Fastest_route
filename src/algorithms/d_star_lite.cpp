@@ -5,6 +5,18 @@
 
 namespace dynamic_route {
 
+namespace {
+inline bool is_consistent(double g, double rhs) noexcept {
+    if (g == rhs) return true;  // Handles INF == INF correctly without NaN arithmetic
+    return std::abs(g - rhs) <= 1e-9;
+}
+
+inline bool is_inconsistent(double g, double rhs) noexcept {
+    if (g == rhs) return false;
+    return std::abs(g - rhs) > 1e-9;
+}
+} // anonymous namespace
+
 DStarLite::DStarLite(const Graph& graph, NodeId start, NodeId goal)
     : graph_(graph), start_(start), goal_(goal), last_start_(start) {
     const std::size_t n = graph_.num_nodes();
@@ -48,7 +60,7 @@ void DStarLite::update_vertex(NodeId u) {
         in_open_list_[u] = false;
     }
 
-    if (std::abs(g_[u] - rhs_[u]) > 1e-9) {
+    if (is_inconsistent(g_[u], rhs_[u])) {
         queued_key_[u] = calculate_key(u);
         open_list_.insert({queued_key_[u], u});
         in_open_list_[u] = true;
@@ -66,7 +78,7 @@ SearchResult DStarLite::compute_shortest_path() {
         NodeId u = top_it->second;
 
         LPAKey k_start = calculate_key(start_);
-        if (!(k_old < k_start) && std::abs(rhs_[start_] - g_[start_]) <= 1e-9) {
+        if (!(k_old < k_start) && is_consistent(rhs_[start_], g_[start_])) {
             break;
         }
 
@@ -106,6 +118,7 @@ SearchResult DStarLite::compute_shortest_path() {
         // Trace forward from start to goal
         NodeId curr = start_;
         result.path.push_back(curr);
+        const std::size_t n = graph_.num_nodes();
         while (curr != goal_) {
             NodeId best_succ = curr;
             double best_cost = INF_WEIGHT;
@@ -118,7 +131,7 @@ SearchResult DStarLite::compute_shortest_path() {
                     best_succ = s;
                 }
             }
-            if (best_succ == curr || best_cost >= INF_WEIGHT) {
+            if (best_succ == curr || best_cost >= INF_WEIGHT || result.path.size() > n) {
                 result.path_found = false;
                 result.path.clear();
                 break;
@@ -153,7 +166,7 @@ double DStarLite::get_rhs_value(NodeId u) const {
 bool DStarLite::queue_invariant_holds() const {
     std::size_t flagged = 0;
     for (NodeId u = 0; u < g_.size(); ++u) {
-        const bool inconsistent = std::abs(g_[u] - rhs_[u]) > 1e-9;
+        const bool inconsistent = is_inconsistent(g_[u], rhs_[u]);
         if (inconsistent != in_open_list_[u]) return false;
         if (in_open_list_[u]) {
             ++flagged;
