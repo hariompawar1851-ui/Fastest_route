@@ -33,6 +33,7 @@
 #include <numeric>
 #include <vector>
 #include <cstdio>
+#include <filesystem>
 
 // ===========================================================================
 // Phase 2 Part 1 helpers — generic stress driver
@@ -403,7 +404,7 @@ void test_metadata_and_o1_lookup() {
 void test_graph_io_file_roundtrip() {
     std::cout << "[Test 12] GraphIO: File Export & Load Round-Trip... ";
     auto g_orig = dynamic_route::GraphIO::make_grid(3, 3, 2.0);
-    const std::string tmp_file = "/tmp/dynamic_route_test_roundtrip.txt";
+    const std::string tmp_file = (std::filesystem::temp_directory_path() / "dynamic_route_test_roundtrip.txt").string();
 
     bool saved = dynamic_route::GraphIO::save_edge_list(g_orig, tmp_file);
     assert(saved);
@@ -745,7 +746,7 @@ void test21_ndjson_roundtrip() {
         reporter.compute_shortest_path();
     }
 
-    const std::string tmp_path = "/tmp/dynamic_route_audit_test.ndjson";
+    const std::string tmp_path = (std::filesystem::temp_directory_path() / "dynamic_route_audit_test.ndjson").string();
     bool saved = logger_orig.save_ndjson(tmp_path);
     assert(saved);
     (void)saved;
@@ -1271,12 +1272,224 @@ void test31_navigator_efficiency() {
 }
 
 // ===========================================================================
+// Phase 4 Tests (32–36) — DIMACS/OSM Road Networks & Scalability Benchmarks
+// ===========================================================================
+
+void test32_dimacs_io_and_coordinates() {
+    std::cout << "[Test 32] DIMACS Challenge IO: .gr + .co parser, coordinates & A* agreement... ";
+    const auto tmp_dir = std::filesystem::temp_directory_path();
+    const std::string gr_file = (tmp_dir / "test_dimacs.gr").string();
+    const std::string co_file = (tmp_dir / "test_dimacs.co").string();
+
+    auto g_orig = dynamic_route::GraphIO::make_hierarchical_road_network(100, 1234);
+    bool saved = dynamic_route::GraphIO::save_dimacs(g_orig, gr_file, co_file);
+    assert(saved);
+
+    auto g_loaded = dynamic_route::GraphIO::load_dimacs(gr_file, co_file);
+    assert(g_loaded.num_nodes() == g_orig.num_nodes());
+    assert(g_loaded.num_edges() == g_orig.num_edges());
+
+    // Verify node coordinates preservation
+    for (dynamic_route::NodeId u = 0; u < g_orig.num_nodes(); ++u) {
+        const auto& c_orig = g_orig.get_node(u).coords;
+        const auto& c_load = g_loaded.get_node(u).coords;
+        assert(std::abs(c_orig.x - c_load.x) < 1e-3);
+        assert(std::abs(c_orig.y - c_load.y) < 1e-3);
+    }
+
+    // Verify Dijkstra and A* equivalence on loaded DIMACS graph
+    auto d_res = dynamic_route::Dijkstra::find_shortest_path(g_loaded, 0, 99);
+    auto a_res = dynamic_route::AStar::find_shortest_path(g_loaded, 0, 99);
+    assert(d_res.path_found == a_res.path_found);
+    if (d_res.path_found) {
+        assert(std::abs(d_res.total_cost - a_res.total_cost) < 1e-6);
+        assert(a_res.nodes_visited <= d_res.nodes_visited);
+    }
+
+    std::remove(gr_file.c_str());
+    std::remove(co_file.c_str());
+    std::cout << "PASSED (DIMACS " << g_loaded.num_nodes() << " nodes, "
+              << g_loaded.num_edges() << " edges verified)\n";
+}
+
+void test33_osm_xml_parser_and_projection() {
+    std::cout << "[Test 33] OSM XML parser: node projection, highway tags & oneway rules... ";
+    const auto tmp_dir = std::filesystem::temp_directory_path();
+    const std::string osm_file = (tmp_dir / "test_network.osm").string();
+
+    // Create a synthetic OSM XML sample with known geometry
+    {
+        std::ofstream out(osm_file);
+        out << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            << "<osm version=\"0.6\" generator=\"test\">\n"
+            << "  <node id=\"1001\" lat=\"37.7749\" lon=\"-122.4194\"/>\n"
+            << "  <node id=\"1002\" lat=\"37.7759\" lon=\"-122.4194\"/>\n"
+            << "  <node id=\"1003\" lat=\"37.7759\" lon=\"-122.4184\"/>\n"
+            << "  <node id=\"1004\" lat=\"37.7749\" lon=\"-122.4184\"/>\n"
+            << "  <way id=\"5001\">\n"
+            << "    <nd ref=\"1001\"/>\n"
+            << "    <nd ref=\"1002\"/>\n"
+            << "    <tag k=\"highway\" v=\"primary\"/>\n"
+            << "    <tag k=\"oneway\" v=\"yes\"/>\n"
+            << "    <tag k=\"maxspeed\" v=\"60\"/>\n"
+            << "  </way>\n"
+            << "  <way id=\"5002\">\n"
+            << "    <nd ref=\"1002\"/>\n"
+            << "    <nd ref=\"1003\"/>\n"
+            << "    <tag k=\"highway\" v=\"residential\"/>\n"
+            << "    <tag k=\"maxspeed\" v=\"30\"/>\n"
+            << "  </way>\n"
+            << "  <way id=\"5003\">\n"
+            << "    <nd ref=\"1003\"/>\n"
+            << "    <nd ref=\"1004\"/>\n"
+            << "    <tag k=\"highway\" v=\"secondary\"/>\n"
+            << "  </way>\n"
+            << "</osm>\n";
+    }
+
+    auto g = dynamic_route::GraphIO::load_osm_xml(osm_file);
+    assert(g.num_nodes() == 4);
+    assert(g.num_edges() == 5);
+
+    // Verify coordinates are projected to Cartesian meters
+    const auto& n0 = g.get_node(0).coords;
+    const auto& n1 = g.get_node(1).coords;
+    double dy = std::abs(n1.y - n0.y);
+    assert(dy > 80.0 && dy < 140.0);
+
+    // Verify route finding on loaded OSM graph
+    auto path_res = dynamic_route::Dijkstra::find_shortest_path(g, 0, 3);
+    assert(path_res.path_found);
+    assert(path_res.path.size() == 4);
+
+    // Round-trip test via save_osm_xml
+    const std::string osm_out = (tmp_dir / "test_network_export.osm").string();
+    bool saved = dynamic_route::GraphIO::save_osm_xml(g, osm_out);
+    assert(saved);
+    auto g_reloaded = dynamic_route::GraphIO::load_osm_xml(osm_out);
+    assert(g_reloaded.num_nodes() == g.num_nodes());
+
+    std::remove(osm_file.c_str());
+    std::remove(osm_out.c_str());
+    std::cout << "PASSED (4 nodes, 5 edges, metric projection verified)\n";
+}
+
+void test34_hierarchical_road_network_generator() {
+    std::cout << "[Test 34] Hierarchical Road Generator: degree distribution & road tier hierarchy... ";
+    auto g = dynamic_route::GraphIO::make_hierarchical_road_network(2000, 999);
+    assert(g.num_nodes() == 2000);
+    assert(g.num_edges() > 0);
+
+    // Verify average degree in typical road network range [2.5, 4.0]
+    double avg_degree = static_cast<double>(g.num_edges()) / static_cast<double>(g.num_nodes());
+    assert(avg_degree >= 2.5 && avg_degree <= 4.0);
+
+    // Verify road tier hierarchy metadata (motorways, secondaries, residentials)
+    bool has_motorway = false;
+    bool has_secondary = false;
+    bool has_residential = false;
+    for (dynamic_route::NodeId u = 0; u < g.num_nodes(); ++u) {
+        for (const auto& e : g.get_outgoing_edges(u)) {
+            if (e.road_type == "motorway") {
+                has_motorway = true;
+                assert(e.max_speed >= 100.0);
+            } else if (e.road_type == "secondary") {
+                has_secondary = true;
+                assert(e.max_speed >= 50.0);
+            } else if (e.road_type == "residential") {
+                has_residential = true;
+            }
+        }
+    }
+    assert(has_motorway && has_secondary && has_residential);
+
+    std::cout << "PASSED (2,000 nodes, " << g.num_edges() << " edges, avg degree "
+              << std::fixed << std::setprecision(2) << avg_degree << ")\n";
+}
+
+void test35_scalability_100k_incremental_invariant_and_speedup() {
+    std::cout << "[Test 35] Scalability (100,000 nodes): LPA* incremental invariant & speedup... ";
+    auto g = dynamic_route::GraphIO::make_hierarchical_road_network(100000, 42);
+    assert(g.num_nodes() == 100000);
+
+    dynamic_route::NodeId src = 0;
+    dynamic_route::NodeId dst = 99999;
+
+    dynamic_route::LifelongPlanningAStar lpa(g, src, dst);
+    auto lpa_init = lpa.compute_shortest_path();
+    auto dij_init = dynamic_route::Dijkstra::find_shortest_path(g, src, dst);
+    assert(lpa_init.path_found == dij_init.path_found);
+    if (lpa_init.path_found) {
+        assert(std::abs(lpa_init.total_cost - dij_init.total_cost) < 1e-5);
+    }
+
+    dynamic_route::EventSimulator sim(123);
+    constexpr int NUM_EVENTS = 20;
+    std::size_t total_lpa_exp = 0;
+    std::size_t total_dij_exp = 0;
+
+    for (int i = 0; i < NUM_EVENTS; ++i) {
+        auto evt = sim.generate_random_event(g);
+        lpa.on_edge_changed(evt.from, evt.to, evt.new_weight);
+
+        auto lpa_r = lpa.compute_shortest_path();
+        auto dij_r = dynamic_route::Dijkstra::find_shortest_path(g, src, dst);
+
+        assert(lpa_r.path_found == dij_r.path_found);
+        if (lpa_r.path_found) {
+            assert(std::abs(lpa_r.total_cost - dij_r.total_cost) < 1e-5);
+        }
+
+        total_lpa_exp += lpa_r.nodes_visited;
+        total_dij_exp += dij_r.nodes_visited;
+    }
+
+    assert(total_dij_exp > 0);
+    double reduction = (1.0 - static_cast<double>(total_lpa_exp) / static_cast<double>(total_dij_exp)) * 100.0;
+    assert(reduction >= 95.0);
+
+    std::printf("PASSED (100K nodes, 20 perturbations: %.2f%% node expansion reduction, 100%% cost agreement)\n",
+                reduction);
+}
+
+void test36_route_navigator_large_network() {
+    std::cout << "[Test 36] RouteNavigator on 10,000-node Road Network: D* Lite repairs on the fly... ";
+    auto g = dynamic_route::GraphIO::make_hierarchical_road_network(10000, 77);
+    dynamic_route::NodeId src = 0;
+    dynamic_route::NodeId dst = 9999;
+
+    dynamic_route::RouteNavigator nav(g, src, dst);
+
+    auto incident_provider = [](std::size_t step, dynamic_route::Graph& graph, dynamic_route::NodeId pos) {
+        std::vector<dynamic_route::PerturbationEvent> evts;
+        if (step > 0 && step % 4 == 0) {
+            const auto& outgoing = graph.get_outgoing_edges(pos);
+            if (!outgoing.empty()) {
+                dynamic_route::NodeId nxt = outgoing[0].to;
+                double cur_w = outgoing[0].weight;
+                double new_w = cur_w * 4.0;
+                graph.update_edge_weight(pos, nxt, new_w);
+                evts.push_back({pos, nxt, cur_w, new_w, false});
+            }
+        }
+        return evts;
+    };
+
+    auto rep = nav.run(incident_provider, 0, /*verify=*/true);
+    assert(rep.mismatches == 0);
+    assert(rep.reached_goal || rep.blocked);
+
+    std::cout << "PASSED (steps=" << rep.steps.size() << ", replans=" << rep.replans
+              << ", 0 mismatches across 10,000-node network)\n";
+}
+
+// ===========================================================================
 // main
 // ===========================================================================
 
 int main() {
     std::cout << "============================================================\n";
-    std::cout << "  DynamicRoute - Complete Test Suite (Phase 0 + 1 + 2 + 3)\n";
+    std::cout << "  DynamicRoute - Complete Test Suite (Phase 0 + 1 + 2 + 3 + 4)\n";
     std::cout << "============================================================\n\n";
 
     // ---- Phase 0 ----
@@ -1328,8 +1541,16 @@ int main() {
     test30_navigator_detour_and_unreachable();
     test31_navigator_efficiency();
 
+    // ---- Phase 4 ----
+    std::cout << "\n--- Phase 4: Scalability Benchmarks on OSM / DIMACS Road Networks ---\n";
+    test32_dimacs_io_and_coordinates();
+    test33_osm_xml_parser_and_projection();
+    test34_hierarchical_road_network_generator();
+    test35_scalability_100k_incremental_invariant_and_speedup();
+    test36_route_navigator_large_network();
+
     std::cout << "\n============================================================\n";
-    std::cout << " ALL 31 TESTS PASSED!\n";
+    std::cout << " ALL 36 TESTS PASSED!\n";
     std::cout << "============================================================\n";
     return 0;
 }

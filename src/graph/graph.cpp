@@ -32,6 +32,19 @@ const Node& Graph::get_node(NodeId id) const {
     return nodes_[id];
 }
 
+bool Graph::set_node_coordinates(NodeId id, double x, double y) {
+    if (!has_node(id)) return false;
+    nodes_[id].coords = Coordinates{x, y};
+    return true;
+}
+
+bool Graph::set_node_metadata(NodeId id, const std::string& label, const std::string& node_type) {
+    if (!has_node(id)) return false;
+    nodes_[id].label = label;
+    nodes_[id].node_type = node_type;
+    return true;
+}
+
 void Graph::add_directed_edge(NodeId from, NodeId to, double weight,
                                const std::string& road_type,
                                double capacity,

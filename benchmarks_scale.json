@@ -1,0 +1,55 @@
+{
+  "benchmarks": [
+    {
+      "network": "Hierarchical Road (100000 nodes)",
+      "nodes": 100000,
+      "edges": 340436,
+      "memory_mb": 42.466,
+      "dijkstra_us": 10194.8,
+      "astar_us": 9676.6,
+      "lpa_initial_us": 24048,
+      "dstar_initial_us": 36906.4,
+      "dijkstra_recalc_avg_us": 11115.1,
+      "lpa_repair_avg_us": 0.87,
+      "dstar_repair_avg_us": 2.36,
+      "speedup_lpa": 12776,
+      "speedup_dstar": 4709.79,
+      "node_reduction_pct": 99.9995,
+      "correctness_rate": 1
+    },
+    {
+      "network": "Hierarchical Road (250000 nodes)",
+      "nodes": 250000,
+      "edges": 851701,
+      "memory_mb": 106.23,
+      "dijkstra_us": 32360.6,
+      "astar_us": 46164.8,
+      "lpa_initial_us": 134765,
+      "dstar_initial_us": 148577,
+      "dijkstra_recalc_avg_us": 36413.3,
+      "lpa_repair_avg_us": 6.74,
+      "dstar_repair_avg_us": 3720.64,
+      "speedup_lpa": 5402.56,
+      "speedup_dstar": 9.78683,
+      "node_reduction_pct": 99.9956,
+      "correctness_rate": 1
+    },
+    {
+      "network": "Hierarchical Road (500000 nodes)",
+      "nodes": 500000,
+      "edges": 1704571,
+      "memory_mb": 212.585,
+      "dijkstra_us": 58812.9,
+      "astar_us": 31456.7,
+      "lpa_initial_us": 68979.3,
+      "dstar_initial_us": 126499,
+      "dijkstra_recalc_avg_us": 77956.5,
+      "lpa_repair_avg_us": 1,
+      "dstar_repair_avg_us": 0.51,
+      "speedup_lpa": 77956.5,
+      "speedup_dstar": 152856,
+      "node_reduction_pct": 100,
+      "correctness_rate": 1
+    }
+  ]
+}

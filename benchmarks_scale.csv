@@ -1,0 +1,4 @@
+Network,Nodes,Edges,Memory_MB,Dijkstra_us,AStar_us,LPA_Init_us,DStar_Init_us,Dijkstra_Recalc_Avg_us,LPA_Repair_Avg_us,Speedup_LPA,Node_Reduction_Pct
+Hierarchical Road (100000 nodes),100000,340436,42.466,10194.8,9676.6,24048,36906.4,11115.1,0.87,12776,99.9995
+Hierarchical Road (250000 nodes),250000,851701,106.23,32360.6,46164.8,134765,148577,36413.3,6.74,5402.56,99.9956
+Hierarchical Road (500000 nodes),500000,1704571,212.585,58812.9,31456.7,68979.3,126499,77956.5,1,77956.5,100

@@ -22,6 +22,8 @@ public:
                     const std::string& node_type = "intersection");
     bool has_node(NodeId id) const noexcept;
     const Node& get_node(NodeId id) const;
+    bool set_node_coordinates(NodeId id, double x, double y);
+    bool set_node_metadata(NodeId id, const std::string& label, const std::string& node_type = "intersection");
 
     void add_directed_edge(NodeId from, NodeId to, double weight,
                            const std::string& road_type = "standard",

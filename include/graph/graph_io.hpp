@@ -108,6 +108,78 @@ public:
      * @returns         true on success
      */
     static bool save_edge_list(const Graph& graph, const std::string& filepath);
+
+    /**
+     * @brief Generate a large-scale hierarchical road network (Phase 4).
+     *
+     * Constructs a realistic multi-tier road network:
+     *   - High-speed motorways / arterials connecting regional hubs.
+     *   - Secondary connecting collectors.
+     *   - Local residential streets with realistic spatial clustering and average degree ~2.8-3.4.
+     *
+     * Capable of generating 100K-500K nodes in sub-second time.
+     *
+     * @param num_nodes Target number of nodes (>= 4)
+     * @param seed      RNG seed
+     * @returns         Graph with full coordinates and road metadata
+     */
+    static Graph make_hierarchical_road_network(std::size_t num_nodes,
+                                                std::uint32_t seed = 42);
+
+    // ------------------------------------------------------------------
+    // DIMACS Challenge Format (Phase 4)
+    // ------------------------------------------------------------------
+
+    /**
+     * @brief Load a graph from 9th DIMACS Implementation Challenge format.
+     *
+     * Supports:
+     *   - .gr arc files ("a u v w", 1-based indices, comments with 'c', header 'p sp n m')
+     *   - optional .co coordinate files ("v id x y", 1-based indices, header 'p aux sp co n')
+     *   - combined single files containing both 'a' and 'v' lines.
+     *
+     * @param gr_filepath  Path to the .gr arc file
+     * @param co_filepath  Optional path to the .co coordinate file
+     * @returns            Loaded Graph object with coordinates if present
+     */
+    static Graph load_dimacs(const std::string& gr_filepath,
+                             const std::string& co_filepath = "");
+
+    /**
+     * @brief Save a graph in DIMACS 9th Challenge format.
+     *
+     * @param graph        Graph to export
+     * @param gr_filepath  Destination path for .gr arc file
+     * @param co_filepath  Optional destination path for .co coordinate file
+     * @returns            true on success
+     */
+    static bool save_dimacs(const Graph& graph,
+                            const std::string& gr_filepath,
+                            const std::string& co_filepath = "");
+
+    // ------------------------------------------------------------------
+    // OpenStreetMap (OSM) XML Format (Phase 4)
+    // ------------------------------------------------------------------
+
+    /**
+     * @brief Load a road network from OpenStreetMap (.osm) XML format.
+     *
+     * Projects spherical (lat, lon) coordinates onto metric Cartesian (x, y) coordinates
+     * using equirectangular projection centered on the network's geographic midpoint.
+     *
+     * @param filepath Path to the .osm XML file
+     * @returns        Loaded road graph
+     */
+    static Graph load_osm_xml(const std::string& filepath);
+
+    /**
+     * @brief Save a graph to OpenStreetMap (.osm) XML format.
+     *
+     * @param graph    Graph to export
+     * @param filepath Destination path for .osm XML file
+     * @returns        true on success
+     */
+    static bool save_osm_xml(const Graph& graph, const std::string& filepath);
 };
 
 } // namespace dynamic_route
